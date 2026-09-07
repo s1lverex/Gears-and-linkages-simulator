@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transmission Lab — Manual vs Automatic gear shifting simulator</title>
+<meta name="description" content="Semi-3D educational simulation of a manual (clutch + H-pattern) gearbox and an automatic (torque-converter + planetary) gearbox, plus a comparison of manual and automatic shifting with pros and cons.">
+<style>
+  :root{
+    --bg:#f3f5f9; --panel:#ffffff; --line:#e2e6ef; --ink:#1d2333; --muted:#6b7284;
+    --blue:#3457d5; --blue-deep:#27439f; --amber:#e59a12; --amber-ink:#6b4502;
+    --green:#0e9f6e; --red:#d33a3a; --grey:#78849a;
+    --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.05), 0 10px 26px -14px rgba(16,24,40,.18);
+    --mono:ui-monospace,'Cascadia Mono','SFMono-Regular',Consolas,'Segoe UI Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 system-ui,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  button{font:inherit;color:inherit}
+  .wrap{max-width:1220px;margin:0 auto;padding:0 18px}
+
+  header.topbar{background:var(--panel);border-bottom:1px solid var(--line)}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:750;font-size:16px;letter-spacing:.2px;padding:11px 0;user-select:none}
+  .brand .mark{width:24px;height:24px;border-radius:7px;background:var(--blue);color:#fff;
+    display:grid;place-items:center;font-size:13px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+  .brand small{font-weight:500;color:var(--muted);font-size:12px}
+  .top-note{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:14px}
+  .top-note .pill{background:#eef1f8;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:3px 10px;font-weight:600}
+
+  main{padding:22px 0 48px}
+  .intro h1{margin:2px 0 6px;font-size:25px;letter-spacing:-.3px}
+  .intro p{margin:0 0 16px;color:var(--muted);max-width:980px}
+  .intro p b{color:var(--ink)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 12px;
+    font-weight:600;font-size:13px;cursor:pointer;transition:background .12s,border-color .12s}
+  .btn:hover{background:#f2f4fa}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:var(--blue-deep)}
+  .btn.small{padding:4px 9px;font-size:12px}
+  .btn.warn-on{background:#fff7ea;border-color:var(--amber);color:var(--amber-ink)}
+  .section-label{font-size:11px;font-weight:750;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)}
+
+  /* mode tabs */
+  .mode-tabs{display:flex;gap:8px;margin:2px 0 12px}
+  .mode-tab{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 16px;cursor:pointer;
+    font-weight:700;font-size:13.5px;box-shadow:0 1px 2px rgba(16,24,40,.04);display:flex;align-items:center;gap:7px}
+  .mode-tab .dot{width:8px;height:8px;border-radius:50%;background:#c3cad8}
+  .mode-tab.on{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset;background:#f4f7ff}
+  .mode-tab.on .dot{background:var(--blue)}
+  .mode-tab[data-mode="manual"].on .dot{background:var(--amber)}
+  .mode-tab[data-mode="manual"].on{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset;background:#fffaf0}
+  .mode-tab[data-mode="automatic"].on .dot{background:var(--green)}
+
+  .lab-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:12px;align-items:start}
+  .controls .panel-pad{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .ctl-divider{border:none;border-top:1px solid var(--line);margin:2px 0}
+  .ctl{display:flex;flex-direction:column;gap:7px}
+  .ctl-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .ctl-head label{font-size:13px;font-weight:650}
+  .ctl-head output{font-family:var(--mono);font-size:13px;font-weight:650;color:var(--blue);white-space:nowrap}
+  input[type=range]{width:100%;margin:0;accent-color:var(--blue);cursor:pointer}
+  .row2{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center}
+
+  /* H-pattern widget */
+  .hwrap{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+  .hpattern{position:relative;height:158px;border:1px solid var(--line);border-radius:12px;background:
+    linear-gradient(180deg,#fafbfe,#f0f2f8);user-select:none}
+  .hpattern .gate-v{position:absolute;top:8px;bottom:8px;width:34px;left:calc(25% - 17px);border-left:2px dashed #d4dae7;
+    border-right:2px dashed #d4dae7;background:transparent}
+  .hpattern .gate-v.g1{left:calc(25% - 17px)} .hpattern .gate-v.g2{left:calc(50% - 17px)} .hpattern .gate-v.g3{left:calc(75% - 17px)}
+  .hpattern .gate-h{position:absolute;left:8px;right:8px;height:30px;top:calc(50% - 15px);border-top:2px dashed #d4dae7;
+    border-bottom:2px dashed #d4dae7;border-radius:10px}
+  .hg{position:absolute;width:38px;height:38px;border-radius:9px;border:1px solid var(--line);background:#fff;
+    font-weight:750;font-size:14px;cursor:pointer;box-shadow:0 2px 5px rgba(16,24,40,.10);transform:translate(-50%,-50%)}
+  .hg:hover{border-color:#c9d2e4}
+  .hg.on{background:var(--amber);border-color:var(--amber);color:#fff}
+  .hg.r-on{background:#e0695a;border-color:#e0695a;color:#fff}
+  .hg.busy{animation:blink .5s steps(2) 3}
+  .hg.rev{color:#c2410c}
+  .knob{position:absolute;width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 34% 30%,#7b8fe8,#27439f 70%);
+    box-shadow:0 3px 7px rgba(16,24,40,.4), inset 0 1px 1px rgba(255,255,255,.5);z-index:3;transform:translate(-50%,-50%)}
+  @keyframes blink{50%{opacity:.45}}
+
+  .sel-rows{display:flex;gap:6px}
+  .sel-gear{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 10px;font-weight:700;cursor:pointer;font-size:13px}
+  .sel-gear:hover{border-color:#c9d2e4}
+  .sel-gear.on{background:var(--green);border-color:var(--green);color:#fff}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+    padding:3px 11px;font-size:12px;font-weight:650;background:#f8f9fd}
+  .chip b{color:var(--ink)}
+  .chiprow{display:flex;flex-wrap:wrap;gap:6px}
+
+  /* stage */
+  .stage{display:flex;flex-direction:column;min-width:0}
+  .stage-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .stage-title .t1{font-size:15px;font-weight:700}
+  .stage-title .t2{font-size:12px;color:var(--muted)}
+  .cfg-tag{font:600 12px var(--mono);color:var(--blue-deep);background:#eef2fd;border:1px solid #d7e0f8;
+    border-radius:999px;padding:4px 11px;white-space:nowrap}
+  .canvas-wrap{position:relative;background:#fdfefe;border:1px solid var(--line);border-radius:11px;
+    overflow:hidden;margin-top:10px;height:400px}
+  #mechCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #mechCanvas.shake{animation:shake .35s linear}
+  @keyframes shake{25%{transform:translateX(-6px)}50%{transform:translateX(6px)}75%{transform:translateX(-4px)}}
+
+  /* power flow bar */
+  .flow{display:flex;align-items:stretch;gap:6px;margin-top:10px}
+  .flow .seg{flex:1;border:1px solid var(--line);border-radius:9px;padding:5px 6px;text-align:center;font-size:11px;
+    font-weight:650;color:var(--muted);background:#fafbfe;display:flex;align-items:center;justify-content:center;min-height:30px}
+  .flow .arrow{display:grid;place-items:center;color:#c3cad8;font-weight:800}
+  .flow .seg.on{background:#eef5ff;border-color:var(--blue);color:var(--blue-deep);box-shadow:inset 0 0 0 1px rgba(52,87,213,.25)}
+  .flow .seg.on.amber{background:#fff6e2;border-color:var(--amber);color:var(--amber-ink)}
+  .flow .seg.off{opacity:.5}
+
+  /* legend */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:9px;color:var(--muted);font-size:12px}
+  .legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:0}
+  .legend b{color:var(--ink)}
+
+  /* readouts */
+  .metrics{margin-top:12px}
+  .readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:9px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:9px 12px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .s-label{font-size:10px;font-weight:750;letter-spacing:.55px;text-transform:uppercase;color:var(--muted);display:block}
+  .s-val{display:block;font:650 19px/1.25 var(--mono);color:var(--ink);margin:2px 0 1px;letter-spacing:-.3px}
+  .s-note{font-size:10.5px;color:var(--muted);display:block;min-height:13px}
+  .tach{grid-column:span 2}
+  .tach-track{position:relative;height:10px;background:#eef1f6;border-radius:6px;overflow:hidden;margin-top:5px}
+  .tach-fill{position:absolute;left:0;top:0;bottom:0;width:0%;border-radius:6px;
+    background:linear-gradient(90deg,#0e9f6e,#e5b31b 62%,#d33a3a 92%)}
+  .warn{margin-top:10px;border-radius:9px;padding:7px 11px;font-size:12.5px;font-weight:600;min-height:20px;
+    border:1px solid transparent}
+  .warn.ok{background:#eefaf4;border-color:#bfe8d4;color:#0b6b4a}
+  .warn.bad{background:#fdf0ee;border-color:#f3c2bc;color:#a03223}
+  .warn.info{background:#eef2fd;border-color:#d7e0f8;color:#27439f}
+
+  .foot{margin-top:14px;color:var(--muted);font-size:11.5px}
+  details.help summary{cursor:pointer;font-weight:700;font-size:13.5px;user-select:none}
+  details.help .help-body{margin:10px 0 2px;color:#333c52;font-size:13.5px;display:grid;gap:7px}
+  details.help ul{margin:0;padding-left:18px;display:grid;gap:4px}
+  details.help li::marker{color:var(--blue)}
+  .eq{font:600 12.5px/1.9 var(--mono);color:#2a3350;margin:0;overflow-x:auto;white-space:nowrap}
+  .eq .sep{color:#c2c9d8;padding:0 7px}
+
+  /* comparison section */
+  .cmp h2{margin:26px 0 4px;font-size:21px;letter-spacing:-.3px}
+  .cmp .sub{color:var(--muted);margin:0 0 12px}
+  table.tbl{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden;font-size:13.5px}
+  table.tbl th,table.tbl td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  table.tbl th{background:#f4f7ff;font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+  table.tbl tr:last-child td{border-bottom:none}
+  table.tbl td.c1{font-weight:700;white-space:nowrap;width:170px;color:var(--blue-deep)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .proscons{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:13px 16px;box-shadow:var(--shadow)}
+  .proscons h3{margin:0 0 8px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .proscons.m h3{color:#8a5a05}
+  .proscons.a h3{color:#0b6b4a}
+  .proscons ul{margin:0;padding-left:18px;display:grid;gap:4px}
+  .tag{font-size:10px;font-weight:800;letter-spacing:.6px;padding:2px 8px;border-radius:999px;vertical-align:1px}
+  .tag.pro{background:#e6f6ee;color:#0b6b4a}
+  .tag.con{background:#fdeaea;color:#a03223}
+  .proscons li b{color:var(--ink)}
+  .gloss{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:13px 16px;margin-top:12px;box-shadow:var(--shadow)}
+  .gloss dl{display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;margin:8px 0 0}
+  .gloss dt{font-weight:750;color:var(--blue-deep)}
+  .gloss dd{margin:0;color:#333c52}
+  .lookup{background:#fffbea;border:1px solid #eeda9b;border-radius:var(--radius);padding:13px 16px;margin-top:12px}
+  .lookup h3{margin:0 0 6px;color:#7a5a08}
+  .lookup ol{margin:6px 0 0;padding-left:20px;color:#54491c}
+  .lookup code{font:600 12px var(--mono);background:#fff3c8;border-radius:5px;padding:1px 6px}
+
+  .empty-tip{font-size:12.5px;color:var(--muted);background:#f8f9fd;border:1px dashed var(--line);border-radius:9px;padding:6px 10px}
+  .row-space{display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+  @media (max-width:980px){
+    .lab-grid{grid-template-columns:1fr}
+    .cols{grid-template-columns:1fr}
+    .canvas-wrap{height:340px}
+  }
+  @media (max-width:540px){
+    .top-note .pill{display:none}
+    .s-val{font-size:16px}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="mark">&#9881;</span>Transmission Lab <small>&nbsp;·&nbsp; manual vs automatic gear shifting</small></div>
+    <div class="top-note"><span class="pill">semi-3D educational sim · offline</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="intro">
+    <h1>Shift it yourself, or let the car shift — watch the gears either way.</h1>
+    <p>One simulator, two real ways to change gear. In <b>Manual</b> mode you operate a clutch and an H-pattern lever to select fixed
+       gear pairs. In <b>Automatic</b> mode a torque converter and a planetary gearset change ratio for you while you just steer the throttle.
+       The engine, gearbox and wheels are physically coupled (engine RPM, ratio, wheel speed and road speed all agree),
+       and every mechanism is drawn in a <b>semi-3D cutaway</b>. Scroll down for the <b>manual vs automatic comparison, pros and cons</b>.</p>
+  </div>
+
+  <div class="mode-tabs" role="tablist" aria-label="Simulation mode">
+    <button class="mode-tab on" id="tabManual" data-mode="manual" role="tab" aria-selected="true"><span class="dot"></span>Manual shift (clutch + H-pattern)</button>
+    <button class="mode-tab" id="tabAuto" data-mode="automatic" role="tab" aria-selected="false"><span class="dot"></span>Automatic (torque converter + planetary)</button>
+  </div>
+
+  <section class="lab">
+    <div class="lab-grid">
+      <!-- ============ controls ============ -->
+      <aside class="panel controls" aria-label="Simulation controls">
+        <div class="panel-pad">
+
+          <!-- manual controls -->
+          <div id="ctlManual">
+            <span class="section-label">Gear lever (H-pattern)</span>
+            <div class="hwrap">
+              <div class="hpattern" id="hpattern" aria-label="Gear shift pattern. Click a gear.">
+                <div class="gate-v g1"></div><div class="gate-v g2"></div><div class="gate-v g3"></div>
+                <div class="gate-h"></div>
+                <div class="knob" id="knob" style="left:12.5%;top:50%"></div>
+                <button class="hg" data-g="1" style="left:25%;top:24%" title="1st gear">1</button>
+                <button class="hg" data-g="2" style="left:25%;top:76%" title="2nd gear">2</button>
+                <button class="hg" data-g="3" style="left:50%;top:24%" title="3rd gear">3</button>
+                <button class="hg" data-g="4" style="left:50%;top:76%" title="4th gear">4</button>
+                <button class="hg" data-g="5" style="left:75%;top:24%" title="5th gear (overdrive)">5</button>
+                <button class="hg rev" data-g="R" style="left:75%;top:76%" title="Reverse (press &amp; hold clutch, car stopped)">R</button>
+              </div>
+              <button class="btn small" id="btnN" type="button" title="Return the lever to neutral">&#9675; Neutral</button>
+            </div>
+
+            <div class="ctl-divider"></div>
+
+            <span class="section-label">Clutch pedal</span>
+            <button class="btn" id="btnClutch" type="button" aria-pressed="false">&#128665;&nbsp; Clutch: released</button>
+            <p class="empty-tip">Hold <b>Space</b> (or <b>C</b>) = clutch in. You must be off the clutch to drive, and in to change gear.</p>
+
+            <div class="ctl-divider"></div>
+            <span class="section-label">Manual driving tips</span>
+            <p class="empty-tip">1) Clutch in &#8594; 2) pick <b>1</b> &#8594; 3) some throttle &#8594; 4) release clutch smoothly.
+               Shift up as the needle climbs; clutch in first or you'll grind.</p>
+          </div>
+
+          <!-- automatic controls -->
+          <div id="ctlAuto" hidden>
+            <span class="section-label">Gear selector</span>
+            <div class="chiprow">
+              <button class="sel-gear" data-range="P" type="button" title="Park — gearbox locked">P</button>
+              <button class="sel-gear" data-range="R" type="button" title="Reverse">R</button>
+              <button class="sel-gear" data-range="N" type="button" title="Neutral">N</button>
+              <button class="sel-gear on" data-range="D" type="button" title="Drive — the gearbox shifts itself">D</button>
+            </div>
+            <p class="empty-tip">Drive (D) auto-shifts 1&#8594;2&#8594;3&#8594;4 and back using a speed-based shift schedule.
+               You cannot select R while moving forwards &#8212; that's a real transmission protect rule.</p>
+
+            <div class="ctl-divider"></div>
+            <span class="section-label">Inside the gearbox</span>
+            <div class="chiprow" id="autoState">
+              <span class="chip">Current gear <b id="agGear">1</b></span>
+              <span class="chip">Ratio <b id="agRatio">3.50</b></span>
+              <span class="chip">Clutches <b id="agClutch">C1 + B1</b></span>
+            </div>
+            <p class="empty-tip" id="tcTip">Torque converter: engine side spins first, fluid pushes the turbine — slip shows below.</p>
+          </div>
+
+          <div class="ctl-divider"></div>
+
+          <span class="section-label">Engine &amp; load</span>
+          <div class="ctl">
+            <div class="ctl-head"><label for="thrIn">Throttle</label><output id="thrVal">15%</output></div>
+            <input type="range" id="thrIn" min="0" max="100" step="1" value="15">
+          </div>
+
+          <div class="ctl-divider"></div>
+
+          <span class="section-label">Playback</span>
+          <div class="ctl">
+            <div class="ctl-head"><label for="simSpeed">Sim time scale</label><output id="simSpeedVal">1.00×</output></div>
+            <input type="range" id="simSpeed" min="0.25" max="3" step="0.05" value="1">
+          </div>
+          <div class="row2">
+            <button id="btnPlay" class="btn" type="button" aria-pressed="true">&#10074;&#10074;&nbsp; Pause</button>
+            <button id="btnReset" class="btn" type="button">&#8635;&nbsp; Reset</button>
+          </div>
+
+          <hr class="ctl-divider">
+          <div class="warn ok" id="warnBox" role="status">Ready. Follow the mode tips on the left.</div>
+        </div>
+      </aside>
+
+      <!-- ============ stage ============ -->
+      <section class="panel stage" aria-label="Semi-3D gearbox cutaway and live readouts">
+        <div class="panel-pad" style="display:flex;flex-direction:column;min-width:0">
+          <div class="stage-head">
+            <div class="stage-title">
+              <span class="t1" id="stageTitle">Manual cutaway — clutch &#8594; selected gear pair</span>
+              <span class="t2" id="stageSub">driver presses the clutch to break the engine&#8211;wheels link, moves the lever, releases.</span>
+            </div>
+            <span class="cfg-tag" id="cfgTag">gear 1 · 3.55:1</span>
+          </div>
+
+          <div class="canvas-wrap">
+            <canvas id="mechCanvas" aria-label="Animated semi-3D gear mechanism for the selected mode."></canvas>
+          </div>
+
+          <div class="flow" aria-label="Power flow">
+            <span class="seg" id="flEngine">engine</span>
+            <span class="arrow">&#8594;</span>
+            <span class="seg" id="flCoup">clutch</span>
+            <span class="arrow">&#8594;</span>
+            <span class="seg" id="flGear">gearbox</span>
+            <span class="arrow">&#8594;</span>
+            <span class="seg" id="flFinal">final drive</span>
+            <span class="arrow">&#8594;</span>
+            <span class="seg" id="flWheel">wheels</span>
+          </div>
+
+          <div class="legend" id="legendBox"></div>
+
+          <div class="metrics">
+            <div class="readouts" aria-live="polite">
+              <div class="stat tach"><span class="s-label">Engine speed</span><output class="s-val" id="sEng">900 rpm</output>
+                <span class="s-note" id="sEngNote">idle 900 · redline 7000</span>
+                <div class="tach-track"><span class="tach-fill" id="rpmBar"></span></div>
+              </div>
+              <div class="stat"><span class="s-label">Gear</span><output class="s-val" id="sGear">N</output><span class="s-note" id="sGearNote">neutral — engine free</span></div>
+              <div class="stat"><span class="s-label">Gearbox ratio</span><output class="s-val" id="sRatio">&mdash;</output><span class="s-note">input turns : output 1</span></div>
+              <div class="stat"><span class="s-label">Engine link</span><output class="s-val" id="sLink" style="font-size:16px">clutch open</output><span class="s-note" id="sLinkNote">press the pedal to break the link</span></div>
+              <div class="stat"><span class="s-label">Gearbox output</span><output class="s-val" id="sOut">&mdash;</output><span class="s-note" id="sOutNote">&nbsp;</span></div>
+              <div class="stat"><span class="s-label">Wheel speed</span><output class="s-val" id="sWheel">&mdash;</output><span class="s-note">driveshaft ÷ final 3.90</span></div>
+              <div class="stat"><span class="s-label">Vehicle speed</span><output class="s-val" id="sKmh">0 km/h</output><span class="s-note" id="sDir">&nbsp;</span></div>
+              <div class="stat" id="statTC" hidden><span class="s-label">Converter slip</span><output class="s-val" id="sSlip">&mdash;</output><span class="s-note" id="sTR">torque ratio &mdash;</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <p class="eq">
+        R = N<sub>driven</sub>/N<sub>driver</sub>
+        <span class="sep">·</span>&#969;<sub>out</sub> = &#969;<sub>in</sub>/R
+        <span class="sep">·</span>&#964;<sub>out</sub> = &#964;<sub>in</sub>&#183;R
+        <span class="sep">·</span>v = &#969;<sub>wheel</sub>&#183;r<sub>tyre</sub>
+        <span class="sep">·</span>planetary: &#969;<sub>sun</sub> + k&#183;&#969;<sub>ring</sub> = (1+k)&#969;<sub>carrier</sub>, k = N<sub>ring</sub>/N<sub>sun</sub>
+      </p>
+    </div>
+
+    <details class="card help" style="margin-top:12px">
+      <summary>How the model works &nbsp;&#9660;</summary>
+      <div class="help-body">
+        <ul>
+          <li><b>Engine.</b> Throttle sets engine torque (peak ~205 N·m near 3&#8202;600 rpm); with the throttle closed above idle the engine <b>brakes</b> the car instead of driving it (engine braking). Idle ≈ 900 rpm, redline 7000 rpm.</li>
+          <li><b>Manual coupling.</b> Clutch in &#8594; engine and gearbox are separate (engine free-spins, car coasts). Clutch released in gear &#8594; they are locked: wheel speed = engine RPM ÷ (gear ratio × final drive). Dumping the clutch at very low rpm with little throttle <b>stalls</b> the engine.</li>
+          <li><b>Manual ratios (typical).</b> 1st 3.55, 2nd 2.10, 3rd 1.40, 4th 1.00, 5th 0.77 overdrive, reverse 3.50 (direction reversed through an idler); final drive 3.90.</li>
+          <li><b>Automatic coupling.</b> The torque converter lets the engine spin faster than the gearbox input when pulling away — that speed difference is <b>slip</b>, and at stall it <b>multiplies torque</b> (~1.9×). Near matching speeds the converter stops multiplying and the gearbox input runs almost at engine speed.</li>
+          <li><b>Planetary set.</b> One sun, one ring and planets on a carrier obey &#969;<sub>s</sub> + k·&#969;<sub>r</sub> = (1+k)·&#969;<sub>c</sub>. Lock one member and the other two give a ratio (3.50 / 1.40 / 0.714) or reverse. Direct 3rd locks the set together. <b>Simplification:</b> real 4-speed automatics use two coupled planetary sets (Simpson/Ravigneaux) — this page shows one conceptual set so each ratio's logic is visible.</li>
+          <li><b>Shift schedule (auto).</b> Upshifts at ≈ 22 / 42 / 66 km/h, downshifts at ≈ 10 / 26 / 44 km/h (hysteresis stops gear hunting). Typical values, not a specific car's.</li>
+        </ul>
+      </div>
+    </details>
+
+    <p class="foot">Educational simulation. Plain HTML, CSS &amp; JavaScript — no libraries, works offline. Numbers marked "typical" are illustrative; verify a real car's specs online.</p>
+  </section>
+
+  <!-- ================= comparison section ================= -->
+  <section class="cmp" aria-label="Manual versus automatic comparison">
+    <h2>Manual vs automatic — what is actually different?</h2>
+    <p class="sub">Both change the ratio between engine speed and wheel speed. They differ in <b>who</b> changes it, <b>how</b> the engine is
+       temporarily uncoupled from the wheels, and in cost, effort, efficiency and driving feel.</p>
+
+    <table class="tbl">
+      <tr><th>Aspect</th><th>Manual shift</th><th>Automatic shift</th></tr>
+      <tr><td class="c1">Who picks the gear</td><td>The <b>driver</b> — a lever (H-pattern) and clutch pedal</td><td>The <b>transmission</b> — a shift schedule in the control unit (valve body / TCU), or driver via a mode/selector</td></tr>
+      <tr><td class="c1">Engine–gearbox coupling</td><td><b>Friction clutch</b> (driver-controlled, with a pedal) + synchromesh collars</td><td><b>Torque converter</b> (fluid coupling) or, in newer boxes, clutches; the coupling is automatic</td></tr>
+      <tr><td class="c1">Mechanism</td><td>Parallel shafts with fixed gear pairs; a selector fork slides a collar to lock one pair to the output shaft</td><td>Planetary gear sets whose members are locked by clutches and bands (or dog clutches / dual clutches in DCTs)</td></tr>
+      <tr><td class="c1">Pedals / hands</td><td>Three pedals; left foot busy with the clutch</td><td>Two pedals; both feet rarely needed while driving</td></tr>
+      <tr><td class="c1">Shifting action</td><td>Engine torque is interrupted each shift (clutch in), then re-applied</td><td>Shifts happen under power (or with a small torque-converter / clutch hand-over), usually seamless</td></tr>
+      <tr><td class="c1">Learning curve</td><td>Steep: clutch control, hill starts, rev matching, stalling</td><td>Shallow: select D and go</td></tr>
+      <tr><td class="c1">Efficiency</td><td>Mechanically direct, historically better on fuel; but depends heavily on the driver</td><td>Modern 8–10 speed units and lock-up converters often match or beat manuals; older units lose a little in the converter</td></tr>
+      <tr><td class="c1">Control &amp; engine braking</td><td>Exact control of ratio, gears hold on descents, predictable engine braking</td><td>Good, but the box may upshift or hunt on hills; many cars offer manual paddle/gear overrides</td></tr>
+      <tr><td class="c1">Weight / cost / maintenance</td><td>Lighter, cheaper to buy and repair; clutch wears with use (esp. bad technique and stop-start traffic)</td><td>Heavier and more complex; periodic ATF service; repairs can be expensive</td></tr>
+      <tr><td class="c1">Feel &amp; engagement</td><td>Direct, involving, "connected to the road" — many enthusiasts' choice</td><td>Effortless, smooth, convenient in traffic and for new drivers</td></tr>
+    </table>
+
+    <div class="cols">
+      <div class="proscons m">
+        <h3>&#128664; Manual transmission</h3>
+        <ul>
+          <li><b>Pros</b></li>
+          <li><span class="tag pro">PRO</span> Full driver control of gear and engine speed at all times.</li>
+          <li><span class="tag pro">PRO</span> Usually lighter, cheaper to buy, cheaper to repair.</li>
+          <li><span class="tag pro">PRO</span> Direct mechanical link — very predictable engine braking and response.</li>
+          <li><span class="tag pro">PRO</span> Can be push-started; harder to steal (for most people!).</li>
+          <li><span class="tag pro">PRO</span> Many drivers find it more involving and fun.</li>
+        </ul>
+        <ul>
+          <li><b>Cons</b></li>
+          <li><span class="tag con">CON</span> Takes practice — stalls, hill starts and clutch slip are beginner traps.</li>
+          <li><span class="tag con">CON</span> More effort and fatigue in heavy traffic.</li>
+          <li><span class="tag con">CON</span> Clutch wears faster with poor technique or constant stop-and-go.</li>
+          <li><span class="tag con">CON</span> Bad shifting hurts fuel economy and driveline life.</li>
+          <li><span class="tag con">CON</span> Vanishing availability — few new cars, weaker resale market.</li>
+        </ul>
+      </div>
+      <div class="proscons a">
+        <h3>&#128663; Automatic transmission</h3>
+        <ul>
+          <li><b>Pros</b></li>
+          <li><span class="tag pro">PRO</span> Easiest to drive — no clutch, no stalling, no gear choice.</li>
+          <li><span class="tag pro">PRO</span> Smooth, quick shifts; modern units shift faster than most drivers.</li>
+          <li><span class="tag pro">PRO</span> Very convenient in traffic and on hills (creep, hill-hold, no roll-back).</li>
+          <li><span class="tag pro">PRO</span> TCU always shifts near the engine's sweet spot — often best real-world economy.</li>
+          <li><span class="tag pro">PRO</span> Easier for new drivers, accessibility, remote start, towing modes.</li>
+        </ul>
+        <ul>
+          <li><b>Cons</b></li>
+          <li><span class="tag con">CON</span> Less direct control; gear choice can feel delayed or "hunt" on hills.</li>
+          <li><span class="tag con">CON</span> Heavier, more complex, more expensive to repair.</li>
+          <li><span class="tag con">CON</span> Torque-converter slip wastes a little energy (mitigated by lock-up).</li>
+          <li><span class="tag con">CON</span> Older units can feel sluggish and need periodic fluid service.</li>
+          <li><span class="tag con">CON</span> Less engaging for drivers who enjoy controlling the car themselves.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gloss">
+      <h3 style="margin:0">Mini glossary</h3>
+      <dl>
+        <dt>Ratio R</dt><dd>How many times the input shaft turns for one turn of the output (3.55:1 first gear = torque multiplied, speed divided).</dd>
+        <dt>Final drive</dt><dd>The last fixed reduction (differential) between gearbox and wheels — here 3.90:1.</dd>
+        <dt>Synchromesh</dt><dd>Friction cones inside the collar that match shaft and gear speeds before the teeth engage, so shifts are quiet.</dd>
+        <dt>Torque converter</dt><dd>Fluid coupling (impeller → turbine, plus a stator) that lets the engine idle while the car is stopped and multiplies torque when pulling away.</dd>
+        <dt>Planetary gearset</dt><dd>Sun gear, ring gear and carrier-mounted planets; lock different members to get different ratios from one compact set.</dd>
+        <dt>Overdrive</dt><dd>A ratio below 1:1 (e.g. 5th 0.77) — engine turns slower than the wheels for economical cruising.</dd>
+        <dt>Shift schedule</dt><dd>The speed/load table an automatic uses to decide upshifts and downshifts.</dd>
+        <dt>DCT / CVT</dt><dd>Automatics with two clutches (dual-clutch) or a continuously variable ratio — different mechanisms, out of scope here.</dd>
+      </dl>
+    </div>
+
+    <div class="lookup">
+      <h3>&#128269; Check the numbers online (the author flagged these as "look it up")</h3>
+      <p style="margin:0 0 2px;color:#54491c">Real gear ratios, converter curves and shift points differ from car to car. Try these searches to replace the typical values above with a real vehicle's data:</p>
+      <ol>
+        <li><code>"<model> manual transmission gear ratios final drive"</code> — e.g. a MX-5 or Civic 6-speed; compare with the table above.</li>
+        <li><code>planetary gearset Willis equation derivation sun ring carrier</code> — to check the formula sign convention and the ratio cases.</li>
+        <li><code>4 speed automatic transmission clutch band application chart Simpson gearset</code> — see why real 4-speeds need two planetary sets.</li>
+        <li><code>torque converter stall speed torque ratio curve lockup clutch</code> — converter behavior, stall ratio and lock-up speeds.</li>
+        <li><code>manual vs automatic pros cons fuel economy maintenance</code> — current independent comparisons and economy tests.</li>
+        <li><code>how does synchromesh work</code> and <code>automatic transmission valve body shift schedule explained</code> — the parts this sim simplifies.</li>
+      </ol>
+    </div>
+  </section>
+
+  <p class="foot">Educational simulation. Plain HTML, CSS &amp; JavaScript — no libraries, works offline.</p>
+</main>
+
+<pre id="selftest-out" hidden></pre>
+
+<script>
+/* early error catcher: surfaces JS errors into the DOM for headless checks */
+window.__jserrors = 0;
+window.__lastError = "";
+window.onerror = function (msg, src, line, col) {
+  window.__jserrors += 1;
+  window.__lastError = (msg || "unknown error") + " @ line " + (line || "?");
+  try {
+    var pre = document.getElementById("selftest-out");
+    if (pre) pre.textContent = "[JS ERROR] " + window.__lastError + "\nSELFTEST_DONE";
+    var wb = document.getElementById("warnBox");
+    if (wb) { wb.className = "warn bad"; wb.textContent = "[JS ERROR] " + window.__lastError; }
+  } catch (e) {}
+};
+</script>
+
+<script>
+(function () {
+"use strict";
+
+/* =====================================================================
+   Transmission Lab — manual vs automatic.
+   Plain JS, canvas 2D with a 2.5D ("semi-3D") depth pass, offline.
+   ===================================================================== */
+
+/* ---------------- helpers ---------------- */
+var $ = function (s) { return document.querySelector(s); };
+var TAU = Math.PI * 2;
+function f(x, d) {
+  if (d === undefined) d = 2;
+  var p = Math.pow(10, d);
+  return (Math.round(x * p) / p).toString();
+}
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function approx(a, b, tol) { return Math.abs(a - b) <= tol; }
+
+/* ---------------- physical constants (typical values) ---------------- */
+var IDLE = 900, REDLINE = 7000;
+var FINAL = 3.90;                 // final-drive ratio
+var R_WHEEL = 0.32;               // tyre radius, m
+var MASS = 1200;                  // vehicle mass, kg
+var JENG = 0.16;                  // engine + clutch disc inertia, kg·m^2
+var CRR = 0.012, GRAV = 9.81, CAERO = 0.36; // rolling + aero drag
+var KMH = 3.6;
+
+/* manual gearbox: ratio R = engine turns per output-shaft turn */
+var MAN = [
+  { name: "1", R: 3.55, teeth: [20, 71] },
+  { name: "2", R: 2.10, teeth: [20, 42] },
+  { name: "3", R: 1.40, teeth: [20, 28] },
+  { name: "4", R: 1.00, teeth: [20, 20] },
+  { name: "5", R: 0.77, teeth: [26, 20] }
+];
+var MAN_REV = 3.50;
+var REV_TEETH = [20, 70];
+
+/* automatic: single conceptual planetary set, k = ring/sun = 60/24 = 2.5 */
+var K = 2.5;
+var TEETH_S = 24, TEETH_P = 18, TEETH_R = 60;   // 24 + 2*18 = 60 ✓
+var AUTO = [
+  { name: "1", R: 3.50, hold: "ring",  input: "sun",     output: "carrier", clutches: "C1 + B1" },
+  { name: "2", R: 1.40, hold: "sun",   input: "ring",    output: "carrier", clutches: "C1 + B2" },
+  { name: "3", R: 1.00, hold: null,    input: null,      output: null,      clutches: "C1 + C2 (direct)", direct: true },
+  { name: "4", R: 0.714,hold: "sun",   input: "carrier", output: "ring",    clutches: "C2 + B2" }
+];
+var AUTO_REV = { name: "R", R: 2.50, hold: "carrier", input: "sun", output: "ring", clutches: "C2 + B3" };
+var UP_SHIFT = [22, 42, 66];   // km/h: 1->2, 2->3, 3->4
+var DOWN_SHIFT = [10, 26, 44]; // km/h: 4->3, 3->2, 2->1
+var TC_STALL = 1.9;
+
+/* Willis: omega_sun + k*omega_ring = (1+k)*omega_carrier
+   -> compute the three member speeds for an automatic state */
+function autoSpeeds(conf, wIn) {
+  var out = { sun: 0, ring: 0, carrier: 0, planet: 0, planetRel: 0, direct: !!conf.direct };
+  if (!conf) return out;
+  if (conf.direct) { out.sun = out.ring = out.carrier = out.planet = wIn; return out; }
+  var hold = conf.hold, input = conf.input;
+  // input member speed = wIn ; solve for the third member from Willis
+  if (hold === "ring") {              // omega_ring = 0
+    out.ring = 0; out.sun = wIn;
+    out.carrier = wIn / (1 + K);
+  } else if (hold === "sun") {        // omega_sun = 0
+    out.sun = 0;
+    if (input === "ring") { out.ring = wIn; out.carrier = K * wIn / (1 + K); }
+    else { out.carrier = wIn; out.ring = (1 + K) * wIn / K; }
+  } else {                            // hold carrier: omega_carrier = 0
+    out.carrier = 0; out.sun = wIn;   // input sun
+    out.ring = -wIn / K;              // reverse direction
+  }
+  // planet spin in the carrier frame (meshes with the sun: external pair)
+  out.planetRel = -(out.sun - out.carrier) * TEETH_S / TEETH_P;
+  out.planet = out.carrier + out.planetRel;
+  return out;
+}
+
+/* ---------------- state ---------------- */
+var st = {
+  mode: "manual",
+  running: true, timeScale: 1, tSim: 0, lastT: null,
+  throttle: 0.15,
+  engOn: true, eng: 0, wheel: 0,          // rad/s (wheel signed: reverse < 0)
+  // manual
+  mPos: 0,          // 0 neutral, 1..5, -1 reverse
+  clutchIn: false, clutchFrac: 1, grindT: 0, angA: 0,
+  // automatic
+  aRange: "D", aGear: 1,
+  aPrevDir: 1, protectT: 0, gearChgT: 0, slip: 0, tr: 1,
+  aSun: 0, aRing: 0, aCarrier: 0, aPlanet: 0
+};
+function rpmOf(w) { return w * 30 / Math.PI; }
+function engRpm() { return rpmOf(st.eng); }
+
+/* ratio tables */
+function manualRatio() {
+  if (st.mPos === 0) return 0;
+  if (st.mPos < 0) return -MAN_REV;
+  return MAN[st.mPos - 1].R;
+}
+function autoRatio() {
+  if (st.aRange === "R") return -AUTO_REV.R;
+  if (st.aRange === "D") return AUTO[st.aGear - 1].R;
+  return 0; // P / N
+}
+function currentRatio() {
+  return st.mode === "manual" ? manualRatio() : autoRatio();
+}
+/* signed overall ratio engine -> wheels */
+function overallG() {
+  var r = currentRatio();
+  return r === 0 ? 0 : r * FINAL;
+}
+function vehSpeedKmh() { return st.wheel * R_WHEEL * KMH; }
+
+/* ---------------- engine model ---------------- */
+function rpmTarget() {
+  if (!st.engOn) return 0;
+  var u = st.throttle;
+  return IDLE + (REDLINE - IDLE) * Math.pow(u, 0.75);
+}
+function engTorque(rpm) {
+  if (!st.engOn || rpm <= 0) return 0;
+  var u = st.throttle;
+  var drive = 0, brake = 0, idlePush = 0;
+  // idle-creep only makes sense in 1st / reverse (real cars don't creep in 5th)
+  var creepGear = st.mode === "manual"
+    ? (st.mPos === 1 || st.mPos === -1)
+    : (st.aRange === "R" || (st.aRange === "D" && st.aGear === 1));
+  if (u > 0.03) {
+    var shape = Math.max(0.3, 1 - 0.55 * Math.pow((rpm - 3600) / 3600, 2));
+    drive = u * 205 * shape;
+    if (rpm >= REDLINE) drive = 0;            // rev limiter cuts the fuel
+  } else {
+    // engine braking above idle (strong, so lifting off the throttle slows the car)
+    brake = -55 * ((rpm - IDLE) / 1000);
+    if (creepGear) {
+      // 1st/reverse: below idle the idle governor pushes the engine up so a
+      // clutch release creeps the car away; above idle it tapers off
+      idlePush = rpm < IDLE ? 34 * (1 - rpm / IDLE) : 20 * Math.max(0, 1 - (rpm - IDLE) / 1000);
+    }
+  }
+  return drive + brake + idlePush;
+}
+
+/* drag on the wheels (N, signed opposite to motion) */
+function resistForce(v) {
+  var dir = v > 1e-6 ? 1 : (v < -1e-6 ? -1 : 0);
+  var m = Math.abs(v);
+  return dir * (CRR * MASS * GRAV + CAERO * m * m);
+}
+
+/* vehicle inertia seen at the wheels with the engine locked through ratio G */
+function effInertia(G) { return MASS * R_WHEEL * R_WHEEL + JENG * G * G; }
+
+/* ---------------- physics steps ---------------- */
+
+/* engine decoupled (neutral, clutch in, auto P/N, or engine off) */
+function engineFree(dt) {
+  var target = rpmTarget() * Math.PI / 30;
+  st.eng += (target - st.eng) * (1 - Math.exp(-dt / 0.55));
+  if (!st.engOn) st.eng = Math.max(0, st.eng - 6 * dt);
+}
+function wheelCoast(dt) {
+  var F = resistForce(st.wheel * R_WHEEL);
+  var a = -F * R_WHEEL / (MASS * R_WHEEL * R_WHEEL);
+  st.wheel += a * dt;
+  if (Math.abs(st.wheel) < 0.02 && Math.abs(a) < 0.05) st.wheel = 0;
+}
+/* engine + wheels locked through ratio G (manual, clutch fully engaged) */
+function lockedDrive(dt, G) {
+  var tauE = engTorque(engRpm());
+  var J = effInertia(G);
+  var a = (tauE * G - resistForce(st.wheel * R_WHEEL) * R_WHEEL) / J;
+  st.wheel += a * dt;
+  st.eng = st.wheel * G;
+}
+/* torque-converter path (automatic): turbine torque = TR(slip) * engine torque */
+function tcDrive(dt, G) {
+  if (G === 0) return false;
+  var ve = st.eng, vt = st.wheel * G;
+  var sr = ve > 1e-3 ? vt / ve : 0;          // speed ratio (overrun clamps at 1)
+  sr = clamp(sr, 0, 1);
+  var tr = sr >= 1 ? 1 : 1 + (TC_STALL - 1) * Math.pow(1 - sr, 1.5);
+  var tauE = engTorque(engRpm());
+  var tauT = tauE * tr;
+  var J = MASS * R_WHEEL * R_WHEEL;
+  st.wheel += (tauT * G - resistForce(st.wheel * R_WHEEL) * R_WHEEL) / J * dt;
+  // engine: impeller load ~ tauT/tr ; throttle pulls it toward target
+  var imp = tauT / tr;
+  var ae = (tauE - imp) / JENG + (rpmTarget() * Math.PI / 30 - ve) * 1.4;
+  st.eng = Math.max(0, st.eng + ae * dt);
+  st.slip = 1 - sr; st.tr = tr;
+  // strong coupling pulls the engine up when the car drives it (overrun)
+  if (vt > ve * 0.98) st.eng += (vt - st.eng) * (1 - Math.exp(-dt / 0.4));
+  return true;
+}
+
+function stepManual(dt) {
+  // integrate the visual input-shaft angle (so the drawn gears spin continuously)
+  st.angA += visualInputOmega() * dt;
+  var G = overallG();
+  var linked = G !== 0 && st.clutchFrac >= 1 && st.engOn;
+  if (linked) {
+    // stall rule: a *running* engine dragged below ~500 rpm with no throttle
+    // (e.g. braking in too high a gear) stalls. A fresh clutch release from a
+    // standstill is allowed to creep instead (idle torque pulls the car away).
+    var prevRpm = engRpm();
+    lockedDrive(dt, G);
+    if (st.engOn && engRpm() < 500 && prevRpm > 750 && st.throttle < 0.05) {
+      st.engOn = false;
+      setWarn("Engine stalled! Clutch in, go to neutral, then add a little throttle.", "bad");
+    }
+  } else if (st.clutchFrac > 0 && G !== 0 && st.engOn) {
+    // slipping clutch: blend free-wheel and locked accelerations
+    var accF = -(resistForce(st.wheel * R_WHEEL) * R_WHEEL) / (MASS * R_WHEEL * R_WHEEL);
+    var J = effInertia(G);
+    var accL = (engTorque(engRpm()) * G - resistForce(st.wheel * R_WHEEL) * R_WHEEL) / J;
+    st.wheel += lerp(accF, accL, st.clutchFrac) * dt;
+    engineFree(dt);
+    st.eng = lerp(st.eng, st.wheel * G, st.clutchFrac * 0.85);
+  } else {
+    if (G !== 0 && !st.engOn && st.clutchFrac >= 1) {
+      // stalled in gear with clutch out: driveline drags the engine to a halt
+      st.eng = Math.max(0, st.eng - 30 * dt);
+      st.wheel *= Math.max(0, 1 - 1.6 * dt);
+    } else {
+      engineFree(dt);
+      wheelCoast(dt);
+    }
+  }
+  if (!st.engOn && (st.mPos === 0 || st.clutchIn) && st.throttle > 0.05) {
+    st.engOn = true;
+    st.eng = IDLE * Math.PI / 30;
+    setWarn("Engine restarted.", "ok");
+  }
+  // clutch pedal movement
+  var targetFrac = st.clutchIn ? 0 : 1;
+  var rate = st.clutchIn ? 1 / 0.12 : 1 / 0.35;   // quick in, slower out
+  st.clutchFrac += clamp(targetFrac - st.clutchFrac, -rate * dt, rate * dt);
+}
+
+function stepAuto(dt) {
+  var G = overallG();
+  if (st.aRange === "P") {
+    engineFree(dt);
+    st.wheel *= Math.max(0, 1 - 3.0 * dt);       // park brake
+    if (Math.abs(st.wheel) < 0.03) st.wheel = 0;
+    return;
+  }
+  if (st.aRange === "N" || G === 0) { engineFree(dt); wheelCoast(dt); return; }
+  tcDrive(dt, G);
+  // integrate the planetary member angles for the drawing
+  var conf = st.aRange === "R" ? AUTO_REV : AUTO[st.aGear - 1];
+  var sp = autoSpeeds(conf, st.eng);
+  st.aSun += sp.sun * dt;
+  st.aRing += sp.ring * dt;
+  st.aCarrier += sp.carrier * dt;
+  st.aPlanet += sp.planet * dt;
+  autoShifts(dt);
+}
+
+function autoShifts(dt) {
+  if (st.aRange !== "D") return;
+  var v = Math.abs(vehSpeedKmh());
+  var g = st.aGear;
+  if (g < 4 && v >= UP_SHIFT[g - 1]) { st.aGear = g + 1; flashAuto(); }
+  else if (g > 1 && v <= DOWN_SHIFT[g - 2]) { st.aGear = g - 1; flashAuto(); }
+}
+function flashAuto() {
+  st.gearChgT = 0.5;
+}
+
+/* ---------------- mode / range actions ---------------- */
+
+function setMode(m) {
+  if (st.mode === m) return;
+  st.mode = m;
+  $("#tabManual").className = "mode-tab" + (m === "manual" ? " on" : "");
+  $("#tabAuto").className = "mode-tab" + (m === "automatic" ? " on" : "");
+  $("#tabManual").setAttribute("aria-selected", m === "manual" ? "true" : "false");
+  $("#tabAuto").setAttribute("aria-selected", m === "automatic" ? "true" : "false");
+  $("#ctlManual").hidden = m !== "manual";
+  $("#ctlAuto").hidden = m !== "automatic";
+  $("#statTC").hidden = m !== "automatic";
+  updateModeChrome();
+  renderAll();
+}
+
+function selectGearManual(g) {
+  // g: "1".."5","R","N" -> st.mPos (0 neutral, 1..5, -1 reverse)
+  var want = g === "R" ? -1 : (g === "N" ? 0 : parseInt(g, 10));
+  if (want === st.mPos) { animateKnob(want === 0 ? null : g); return; }
+  if (want !== 0 && !st.clutchIn) {
+    st.grindT = 0.45;
+    setWarn("GRIND! Push the clutch in before moving the lever.", "bad");
+    return;
+  }
+  // reverse is a forward-moving lock-out (rolling backwards is fine)
+  if (want === -1 && vehSpeedKmh() > 3) {
+    setWarn("Reverse lock-out: stop the car first (like most gearboxes).", "bad");
+    return;
+  }
+  // never allow a shift that would force the engine past the redline
+  if (want !== 0) {
+    var ratio = want < 0 ? MAN_REV : MAN[want - 1].R;
+    var predicted = Math.abs(st.wheel * ratio * FINAL) * 30 / Math.PI;
+    if (predicted > REDLINE + 800) {
+      setWarn("Too fast for gear " + (want < 0 ? "R" : MAN[want - 1].name) + " — it would blow past the redline (brake first).", "bad");
+      return;
+    }
+  }
+  st.mPos = want;
+  setWarn(want === 0 ? "Neutral — engine is free." :
+          (want === -1 ? "Reverse engaged." : "Gear " + MAN[want - 1].name + " engaged (" + f(MAN[want - 1].R, 2) + ":1)."), "ok");
+  animateKnob(want === 0 ? null : g);
+  updateModeChrome();
+}
+
+function setRangeAuto(r) {
+  var v = Math.abs(vehSpeedKmh());
+  if (r === "R" && v > 3 && st.aRange !== "R") {
+    st.protectT = 0.6;
+    setWarn("Transmission protect: cannot select R while moving forwards.", "bad");
+    return;
+  }
+  if (st.aRange === "R" && r !== "R" && v > 1) {
+    setWarn("Shifted out of reverse while moving.", "info");
+  }
+  st.aRange = r;
+  if (r === "D") st.aGear = 1;
+  setWarn(r === "P" ? "Park — gearbox locked." : r === "R" ? "Reverse engaged." :
+          r === "N" ? "Neutral." : "Drive — automatic shifting active.", "ok");
+  updateModeChrome();
+}
+
+/* ---------------- lever knob animation ---------------- */
+var KNOB_POS = {
+  "1": [0.25, 0.24], "2": [0.25, 0.76], "3": [0.50, 0.24], "4": [0.50, 0.76],
+  "5": [0.75, 0.24], "R": [0.75, 0.76], N: [0.125, 0.5]
+};
+var KNOB_HOME = [0.125, 0.5];
+function knobPct() { return { x: st.knob.x, y: st.knob.y }; }
+function animateKnob(g) {
+  var el = $("#knob");
+  if (!el) return;
+  var home = { x: 0.125, y: 0.5 };
+  var target = g ? KNOB_POS[g] : home;
+  el.style.left = (target[0] * 100) + "%";
+  el.style.top = (target[1] * 100) + "%";
+  el.style.transition = "left .18s ease, top .18s ease";
+}
+
+/* ---------------- DOM text helpers ---------------- */
+function setText(id, s) { var el = $(id); if (el) el.textContent = s; }
+function setWarn(msg, kind) {
+  var el = $("#warnBox"); if (!el) return;
+  el.className = "warn " + (kind || "ok");
+  el.textContent = msg;
+}
+
+function gearLabel() {
+  if (st.mode === "manual") {
+    if (st.mPos === 0) return "N";
+    return st.mPos < 0 ? "R" : String(st.mPos);
+  }
+  if (st.aRange === "P") return "P";
+  if (st.aRange === "N") return "N";
+  if (st.aRange === "R") return "R";
+  return String(st.aGear);
+}
+function ratioText() {
+  var r = currentRatio();
+  if (r === 0) return "\u2014";
+  var mag = Math.abs(r);
+  return f(mag, 3) + (r < 0 ? " (rev)" : "");
+}
+
+function updateModeChrome() {
+  var manual = st.mode === "manual";
+  setText("#stageTitle", manual
+    ? "Manual cutaway — clutch \u2192 selected gear pair"
+    : "Automatic cutaway — torque converter \u2192 planetary set");
+  setText("#stageSub", manual
+    ? "Clutch (left) drives the input gear; it meshes through the countershaft to the output gear \u2014 R = output teeth \u00f7 input teeth."
+    : "Engine (left) spins the converter, which spins the planetary set; one member is held by a band.");
+  // config tag
+  var cfg = "";
+  if (manual) {
+    cfg = st.mPos === 0 ? "neutral \u00b7 no gear locked"
+      : (st.mPos === -1 ? "reverse \u00b7 " + f(MAN_REV, 2) + ":1" : "gear " + MAN[st.mPos - 1].name + " \u00b7 " + f(MAN[st.mPos - 1].R, 2) + ":1");
+  } else {
+    var c2 = st.aRange === "R" ? AUTO_REV : (st.aRange === "D" ? AUTO[st.aGear - 1] : null);
+    cfg = c2 ? (st.aRange === "R" ? "reverse \u00b7 " + f(c2.R, 2) + ":1" : "gear " + c2.name + " \u00b7 " + f(c2.R, 3) + ":1")
+             : (st.aRange === "P" ? "park \u00b7 locked" : "neutral");
+  }
+  setText("#cfgTag", cfg);
+  // manual chrome: gear buttons
+  var hg = document.querySelectorAll("#hpattern .hg");
+  for (var i = 0; i < hg.length; i++) {
+    var v = hg[i].dataset.g;
+    var on = (v === "R" && st.mPos === -1) || (v !== "R" && st.mPos === parseInt(v, 10));
+    hg[i].className = "hg" + (on ? (v === "R" ? " r-on" : " on") : (v === "R" ? " rev" : ""));
+  }
+  var cb = $("#btnClutch");
+  cb.className = "btn" + (st.clutchIn ? " warn-on" : "");
+  cb.setAttribute("aria-pressed", st.clutchIn ? "true" : "false");
+  cb.innerHTML = (st.clutchIn ? "\u2B62\u00a0 Clutch: pressed (in)" : "\u2B60\u00a0 Clutch: released");
+  // auto chrome
+  var sg = document.querySelectorAll(".sel-gear");
+  for (var j = 0; j < sg.length; j++) sg[j].className = "sel-gear" + (sg[j].dataset.range === st.aRange ? " on" : "");
+  var conf = st.aRange === "R" ? AUTO_REV : (st.aRange === "D" ? AUTO[st.aGear - 1] : null);
+  setText("#agGear", gearLabel());
+  setText("#agRatio", conf ? f(conf.R, 3) : "\u2014");
+  setText("#agClutch", conf ? conf.clutches : "\u2014");
+  // flow bar + legend text
+  $("#flCoup").textContent = manual ? "clutch" : "torque converter";
+}
+
+function updateReadouts() {
+  var rpm = Math.round(engRpm());
+  setText("#sEng", rpm + " rpm");
+  setText("#sEngNote", (st.engOn ? "idle 900 · redline 7000" : "ENGINE OFF — stalled"));
+  var bar = $("#rpmBar"); if (bar) bar.style.width = clamp(rpm / 7600 * 100, 0, 100) + "%";
+  setText("#sGear", gearLabel());
+  setText("#sGearNote", st.mode === "manual"
+    ? (st.mPos === 0 ? "neutral — engine free" : (st.mPos === -1 ? "reverse · direction reversed" : "gear " + MAN[st.mPos - 1].name + " of 5"))
+    : (st.aRange === "P" ? "park — box locked" : st.aRange === "N" ? "neutral" : st.aRange === "R" ? "reverse" : "gear " + st.aGear + " of 4"));
+  setText("#sRatio", ratioText());
+  var r = currentRatio(), G = overallG(), o = G === 0 ? 0 : st.eng / G;
+  setText("#sOut", o === 0 ? "\u2014" : Math.round(Math.abs(rpmOf(o))) + " rpm");
+  setText("#sOutNote", G === 0 ? "\u2014" : (r > 0 ? "same direction as engine" : "opposite direction (reverse)"));
+  setText("#sWheel", Math.abs(rpmOf(st.wheel)).toFixed(0) + " rpm");
+  var v = vehSpeedKmh();
+  setText("#sKmh", Math.abs(v).toFixed(1) + " km/h");
+  setText("#sDir", v > 0.3 ? "moving forwards \u2192" : v < -0.3 ? "moving backwards \u2190" : "stationary");
+  // engine link chip
+  var manual = st.mode === "manual";
+  if (manual) {
+    var linked = G !== 0 && st.clutchFrac >= 1 && st.engOn;
+    setText("#sLink", linked ? "locked (clutch out)" : st.clutchFrac < 1 ? "clutch slipping" : G === 0 ? "neutral" : "clutch open");
+    setText("#sLinkNote", linked ? "engine and wheels turn together" : "engine free — wheels coast");
+  } else {
+    setText("#sLink", st.aRange === "P" ? "parked" : st.aRange === "N" || G === 0 ? "neutral" : "converter coupled");
+    setText("#sLinkNote", "slip shown right \u2192");
+  }
+  // flow bar state
+  $("#flEngine").className = "seg" + (st.engOn ? " on" : " off");
+  var couplingOn = manual
+    ? (G !== 0 && st.clutchFrac >= 0.6 && st.engOn)
+    : (st.aRange === "D" || st.aRange === "R");
+  $("#flCoup").className = "seg" + (couplingOn ? " on" : " off");
+  $("#flGear").className = "seg" + (G !== 0 && st.engOn ? " on amber" : " off");
+  var driveToWheels = couplingOn && G !== 0 && st.engOn && (manual ? st.clutchFrac >= 1 : true);
+  $("#flFinal").className = "seg" + (driveToWheels ? " on" : " off");
+  $("#flWheel").className = "seg" + (driveToWheels ? " on" : " off");
+  // auto extras
+  if (!manual) {
+    if (st.aRange === "D" || st.aRange === "R") {
+      var sr = 1 - st.slip;
+      setText("#sSlip", (st.slip * 100).toFixed(1) + " %");
+      setText("#sTR", "torque ratio \u00d7" + f(st.tr || 1, 2) + " · speed ratio " + f(sr, 3));
+      setText("#tcTip", st.slip < 0.03 ? "Converter ≈ locked-up — slip near zero, best economy." : "Slip " + Math.round(st.slip * 100) + "% — converter is multiplying torque while slipping.");
+    } else {
+      setText("#sSlip", "\u2014"); setText("#sTR", "no converter load"); setText("#tcTip", "Move the selector to D or R to load the torque converter.");
+    }
+  }
+}
+
+/* ---------------- semi-3D rendering ---------------- */
+
+var COL = {
+  engine: "#78849a", input: "#3457d5", output: "#e59a12", ghost: "#c3cad8",
+  darkIn: "#22315f", darkOut: "#8a6405", ringC: "#0e9f6e", sunC: "#3457d5",
+  planetC: "#e59a12", carrierC: "#78849a", line: "#e2e6ef", ink: "#6b7284"
+};
+
+/* gear tooth profile points (closed path) */
+function gearPath(r, teeth, rot) {
+  var pts = [], steps = teeth * 12;
+  var root = r - Math.max(2.5, r * 0.09), tip = r + Math.max(3.5, r * 0.13);
+  for (var s = 0; s <= steps; s++) {
+    var rad;
+    var L = s % 12;
+    if (L < 1.5) rad = root;
+    else if (L < 3) rad = root + (tip - root) * ((L - 1.5) / 1.5);
+    else if (L < 9) rad = tip;
+    else if (L < 10.5) rad = tip - (tip - root) * ((L - 9) / 1.5);
+    else rad = root;
+    var a = rot + (s / steps) * TAU;
+    pts.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+  }
+  return pts;
+}
+function tracePath(ctx, pts, x, y) {
+  ctx.beginPath();
+  for (var i = 0; i < pts.length; i++) {
+    var px = x + pts[i][0], py = y + pts[i][1];
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+/* semi-3D gear: a darker back copy offset by depth + lighter front face on top */
+function drawGear3D(ctx, x, y, r, teeth, rot, face, depth, label) {
+  var d = depth || Math.max(8, r * 0.22);
+  var pts = gearPath(r, teeth, rot);
+  var dark = shade(face, -34);
+  tracePath(ctx, pts, x, y + d); ctx.fillStyle = dark; ctx.fill();
+  tracePath(ctx, pts, x, y); ctx.fillStyle = face; ctx.fill();
+  ctx.lineWidth = 1; ctx.strokeStyle = "rgba(0,0,0,.10)";
+  tracePath(ctx, pts, x, y); ctx.stroke();
+  // hub + bore (pierced look)
+  ctx.beginPath(); ctx.arc(x, y, Math.max(r * 0.30, 3), 0, TAU);
+  ctx.fillStyle = "#fff"; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.12)"; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, Math.max(r * 0.10, 1.4), 0, TAU);
+  ctx.fillStyle = "#22304f"; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y + d, Math.max(r * 0.10, 1.4), 0, TAU);
+  ctx.fillStyle = shade(face, -40); ctx.fill();
+  // rotation marker
+  var mr = r * 0.62;
+  ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = Math.max(1.6, r * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(x + Math.cos(rot) * mr, y + Math.sin(rot) * mr);
+  ctx.lineTo(x + Math.cos(rot) * r * 0.95, y + Math.sin(rot) * r * 0.95);
+  ctx.stroke();
+  if (label) {
+    ctx.fillStyle = COL.ink; ctx.font = "600 12px system-ui, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(label, x, y + r + d + 16);
+  }
+}
+function shade(hex, amt) {
+  var n = parseInt(hex.slice(1), 16);
+  var r = clamp((n >> 16) + amt, 0, 255), g = clamp(((n >> 8) & 255) + amt, 0, 255), b = clamp((n & 255) + amt, 0, 255);
+  return "rgb(" + r + "," + g + "," + b + ")";
+}
+
+/* arrow showing rotation sense around a centre */
+function spinArrow(ctx, x, y, rad, omega, color) {
+  if (Math.abs(omega) < 1e-3) return;
+  var dir = omega > 0 ? 1 : -1;
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.arc(x, y, rad, -Math.PI * 0.2, Math.PI * 0.35 * dir, dir < 0);
+  ctx.stroke(); ctx.setLineDash([]);
+}
+
+/* ---------------- manual scene ----------------
+   Three shafts shown as a straight chain of meshing gears: the clutch-side
+   INPUT gear drives a COUNTERSHAFT gear, which drives the OUTPUT gear that is
+   locked to the output shaft by the selector collar. Two meshes mean the
+   output spins the SAME way as the input; countershaft teeth cancel out of
+   the ratio, so R = teeth_out / teeth_in (shown under the drawn gears).     */
+function manualTeeth() {
+  if (st.mPos === -1) return { tA: REV_TEETH[0], tC: REV_TEETH[1], rev: true };
+  if (st.mPos === 0) return { tA: MAN[0].teeth[0], tC: MAN[0].teeth[1], rev: false };
+  var t = MAN[st.mPos - 1].teeth;
+  return { tA: t[0], tC: t[1], rev: false };
+}
+function visualInputOmega() {
+  // angular speed of the clutch-side input shaft (for the drawing)
+  if (st.mPos === 0) return (st.clutchFrac >= 0.5 && st.engOn) ? st.eng : 0;
+  if (st.clutchFrac >= 1 && st.engOn) return st.eng;
+  if (st.clutchFrac > 0.02 && st.engOn) return st.eng * st.clutchFrac;      // clutch slipping
+  if (st.mPos > 0 && Math.abs(st.wheel) > 0.02) return st.wheel * FINAL * MAN[st.mPos - 1].R; // back-driven
+  return 0;
+}
+function drawManual(ctx, W, H) {
+  var th = manualTeeth();
+  var tA = th.tA, tC = th.tC, tB = 36, rev = th.rev;
+  var engaged = st.mPos !== 0;
+
+  // fit the three gears into the canvas
+  var maxT = Math.max(tA, tB, tC);
+  var ku = Math.min((W - 210) / (2 * (tA + tB + tC)), (H - 74) / (2 * maxT), 1.5);
+  var rA = ku * tA, rB = ku * tB, rC = ku * tC;
+  var maxR = ku * maxT;
+  var cy = Math.max(H * 0.5, maxR + 34);
+  if (cy + maxR > H - 6) cy = H - 6 - maxR;
+  var xA = 116 + rA;
+  var xB = xA + rA + rB;
+  var xC = xB + rB + rC;
+
+  // shafts
+  drawShaftLine(ctx, 46, cy, xA - rA - 2, cy, "#9aa3b5");           // input (clutch side)
+  drawShaftLine(ctx, xA + rA + 2, cy, xB - rB - 2, cy, "#9aa3b5");  // countershaft
+  drawShaftLine(ctx, xB + rB + 2, cy, W - 30, cy, "#9aa3b5");       // output -> final drive
+
+  engineMark(ctx, 46, cy);
+  finalMark(ctx, W - 38, cy);
+
+  // clutch discs between the engine and the input gear
+  var clX = xA - rA - 40;
+  drawClutch(ctx, clX, cy, st.clutchFrac);
+
+  // gear rotation phases (all derived from the same integrated input angle)
+  var VIS = 0.05;
+  var angA = st.angA * VIS;
+  var phA = angA;
+  var phB = (Math.PI - Math.PI / tB) - angA * (tA / tB);
+  // C always meshes B (its extra reverse-idler is drawn in the caption, not here)
+  var phC = (Math.PI - Math.PI / tC) + angA * (tA / tC);
+
+  var colA = COL.input;
+  var colB = "#b7bfcd";
+  var colC = engaged ? COL.output : "#d5dbe6";
+
+  drawGear3D(ctx, xA, cy, rA, tA, phA, colA, Math.max(8, rA * 0.2), tA + " teeth");
+  drawGear3D(ctx, xB, cy, rB, tB, phB, colB, Math.max(8, rB * 0.2), tB + " teeth");
+  drawGear3D(ctx, xC, cy, rC, tC, phC, colC, Math.max(8, rC * 0.2), tC + " teeth");
+
+  // shaft labels
+  ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "center";
+  ctx.fillStyle = COL.ink;
+  ctx.fillText("input", xA, cy + rA + 34);
+  ctx.fillText("countershaft", xB, cy + rB + 34);
+  ctx.fillText("output", xC, cy + rC + 34);
+  ctx.fillStyle = "#27439f"; ctx.font = "700 11.5px system-ui";
+  ctx.fillText("clutch side", clX, cy + rA + 44);
+
+  // state caption under the scene
+  ctx.textAlign = "left"; ctx.font = "600 12px system-ui, sans-serif";
+  ctx.fillStyle = "#6b7284";
+  if (st.mPos === 0) {
+    ctx.fillText("\u2022 neutral \u2014 gears spin but no gear is locked to the output shaft", 14, H - 14);
+  } else if (st.mPos === -1) {
+    ctx.fillStyle = "#c2410c";
+    ctx.fillText("\u2022 reverse \u2014 an extra idler gear turns the output the other way", 14, H - 14);
+  } else {
+    ctx.fillStyle = "#0b6b4a";
+    ctx.fillText("\u2022 gear " + st.mPos + " locked \u2014 collar joins the " + tC + "-tooth output gear to its shaft", 14, H - 14);
+  }
+
+  // ratio chip, top-right
+  var name = st.mPos === 0 ? "N" : st.mPos === -1 ? "R" : MAN[st.mPos - 1].name;
+  var rr = st.mPos === 0 ? "free" : (Math.abs(manualRatio()).toFixed(2) + ":1");
+  ctx.font = "700 13px system-ui, sans-serif"; ctx.textAlign = "right";
+  ctx.fillStyle = st.mPos === 0 ? COL.ink : (st.mPos === -1 ? "#c2410c" : "#27439f");
+  ctx.fillText("gear " + name + "  " + rr, W - 14, 24);
+  if (st.grindT > 0) {
+    ctx.font = "800 17px system-ui, sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#d33a3a";
+    ctx.fillText("GRIND!", W / 2, 42);
+  }
+}
+
+function drawShaftLine(ctx, x1, y1, x2, y2, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = 7; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(x1, y1 - 2); ctx.lineTo(x2, y2 - 2); ctx.stroke();
+}
+function engineMark(ctx, x, y) {
+  ctx.fillStyle = COL.engine;
+  ctx.fillRect(x - 16, y - 15, 24, 30);
+  ctx.fillStyle = "rgba(255,255,255,.4)";
+  ctx.fillRect(x - 16, y - 15, 24, 9);
+  ctx.fillStyle = "#fff"; ctx.font = "700 10px system-ui"; ctx.textAlign = "center";
+  ctx.fillText("E", x - 4, y + 4);
+}
+function finalMark(ctx, x, y) {
+  ctx.beginPath(); ctx.arc(x, y, 17, 0, TAU);
+  ctx.fillStyle = "#dfe4ee"; ctx.fill(); ctx.strokeStyle = "#9aa3b5"; ctx.lineWidth = 3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, 5, 0, TAU); ctx.fillStyle = "#78849a"; ctx.fill();
+}
+function drawClutch(ctx, x, y, frac) {
+  // two friction discs: pressed together when the clutch is engaged (frac=1)
+  var gap = frac < 0.05 ? 15 : frac < 1 ? 15 * (1 - frac) + 2 : 2;
+  var r1 = 15, r2 = 15;
+  ctx.beginPath(); ctx.arc(x - gap / 2 - 4, y, r1, 0, TAU);
+  ctx.fillStyle = "#c2410c"; ctx.fill(); ctx.strokeStyle = "#8a2d08"; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x + gap / 2 + 4, y, r2, 0, TAU);
+  ctx.fillStyle = shade("#c2410c", -24); ctx.fill(); ctx.strokeStyle = "#8a2d08"; ctx.stroke();
+  // friction hint text
+  ctx.font = "600 9.5px system-ui"; ctx.textAlign = "center";
+  ctx.fillStyle = "#6b4502";
+  ctx.fillText(gap < 6 ? "pressed \u2014 drive" : "open \u2014 press clutch in", x, y + 34);
+}
+
+/* ---------------- automatic scene ---------------- */
+function drawAutomatic(ctx, W, H) {
+  var cxm = W * 0.62, cym = H * 0.52;
+  var conf = st.aRange === "R" ? AUTO_REV : (st.aRange === "D" ? AUTO[st.aGear - 1] : null);
+
+  var VIS = 0.05;
+  var angS = st.aSun * VIS;
+  var angC = st.aCarrier * VIS;
+  var angR = st.aRing * VIS;
+
+  // torque converter on the left
+  var tcX = W * 0.16, tcY = cym;
+  drawTorqueConverter(ctx, tcX, tcY, 42, st.aRange === "D" || st.aRange === "R");
+  ctx.fillStyle = COL.ink; ctx.font = "600 11.5px system-ui, sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("torque", tcX, tcY + 64);
+  ctx.fillText("converter", tcX, tcY + 78);
+
+  // --- planetary set geometry (semi-3D, world units scaled) ---
+  var P = Math.min(W * 0.30, 120);          // pixel scale for the set
+  var rs = 20, rp = 24, orbit = 44, rringOut = 92, rringIn = 76;
+  var kx = P / 92;
+  var sR = rs * kx, pR = rp * kx, orb = orbit * kx, ringIn = rringIn * kx, ringOut = rringOut * kx;
+  var cx0 = cxm, cy0 = cym;
+
+  function pt(oR, a) { return { x: cx0 + Math.cos(a) * oR, y: cy0 + Math.sin(a) * oR }; }
+
+  // ground backdrop: dashed base line
+  ctx.strokeStyle = COL.line; ctx.setLineDash([4, 5]); ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(0, cym + ringOut + 40); ctx.lineTo(W, cym + ringOut + 40); ctx.stroke(); ctx.setLineDash([]);
+
+  var hold = conf ? conf.hold : null;
+  var inputMember = conf ? conf.input : null;
+
+  // ring gear (biggest): depth copy then face
+  var ringRot = conf && conf.direct ? angS : angR;
+  drawAnnulus(ctx, cx0, cy0, ringOut, ringIn, 14, hold === "ring" ? "#0e9f6e" : "#7fb3a8", "ring", ringRot, conf ? conf.direct : false);
+  // teeth ticks inside the ring
+  ctx.save(); ctx.translate(cx0, cy0); ctx.rotate(ringRot);
+  ctx.fillStyle = "rgba(14,120,80,.75)";
+  for (var i = 0; i < 48; i++) {
+    var a = i / 48 * TAU;
+    ctx.save(); ctx.rotate(a);
+    ctx.fillRect(ringIn - 1, -1.4, -5, 2.8);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // carrier arms
+  var carrierRot = conf && conf.direct ? angS : angC;
+  ctx.save(); ctx.translate(cx0, cy0); ctx.rotate(carrierRot);
+  ctx.strokeStyle = "#7a8498"; ctx.lineWidth = 6; ctx.lineCap = "round";
+  for (var c = 0; c < 3; c++) {
+    var ca = c / 3 * TAU;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ca) * orb, Math.sin(ca) * orb); ctx.stroke();
+  }
+  ctx.restore();
+
+  // planets (each: own spin + revolve with the carrier)
+  for (var pl = 0; pl < 3; pl++) {
+    var pa = pl / 3 * TAU + carrierRot;
+    var pxy = pt(orb, pa);
+    var pSpin = st.aPlanet * VIS;
+    drawGear3D(ctx, pxy.x, pxy.y, pR, TEETH_P, pSpin, COL.planetC, Math.max(7, pR * 0.24), null);
+  }
+  // sun gear at centre
+  drawGear3D(ctx, cx0, cy0, sR, TEETH_S, angS, COL.sunC, Math.max(8, sR * 0.3), "sun");
+  // carrier hub
+  ctx.beginPath(); ctx.arc(cx0, cy0, sR * 0.9 + 3, 0, TAU);
+  ctx.strokeStyle = "#5b6472"; ctx.lineWidth = 3; ctx.stroke();
+
+  // hold lock badge
+  if (hold) {
+    ctx.fillStyle = "rgba(14,159,110,.14)";
+    ctx.beginPath(); ctx.arc(cx0, cy0, ringOut * 0.52, 0, TAU); ctx.fill();
+    var hp = { ring: pt(0, -ringOut * 0.42), sun: pt(0, 0), carrier: pt(0, orb * 0.55) }[hold];
+    if (hp) {
+      ctx.font = "800 15px system-ui"; ctx.textAlign = "center";
+      ctx.fillStyle = "#0b6b4a";
+      ctx.fillText("\uD83D\uDD12", hp.x, hp.y + 5);
+      ctx.font = "700 10.5px system-ui";
+      ctx.fillText(hold + " held", hp.x, hp.y + 20);
+    }
+  }
+  // member labels
+  ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "center";
+  ctx.fillStyle = COL.ink;
+  ctx.fillText("carrier", cx0, cy0 + sR + 14);
+  ctx.fillText("sun", cx0, cy0 - sR - 10);
+  ctx.fillText("ring", cx0, cy0 - ringOut - 8);
+
+  // input arrow: from converter to the input member
+  if (inputMember) {
+    var ip = inputMember === "sun" ? { x: cx0, y: cy0 } : inputMember === "carrier" ? { x: cx0, y: cy0 } : { x: cx0, y: cy0 };
+    ctx.strokeStyle = "#27439f"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(tcX + 50, tcY); ctx.lineTo(cx0 - ringOut - 10, cy0); ctx.stroke();
+    ctx.fillStyle = "#27439f";
+    ctx.beginPath(); ctx.moveTo(cx0 - ringOut - 4, cy0); ctx.lineTo(cx0 - ringOut - 18, cy0 - 7); ctx.lineTo(cx0 - ringOut - 18, cy0 + 7); ctx.fill();
+    ctx.font = "700 11px system-ui"; ctx.textAlign = "right";
+    ctx.fillText("input: " + inputMember, cx0 - ringOut - 24, cy0 - 14);
+  }
+  // gear badge
+  var label = st.aRange === "P" ? "P" : st.aRange === "N" ? "N" : (st.aRange === "R" ? "R" : String(st.aGear));
+  ctx.font = "800 15px system-ui, sans-serif"; ctx.textAlign = "left";
+  ctx.fillStyle = st.aRange === "R" ? "#c2410c" : "#0b6b4a";
+  ctx.fillText((conf ? "gear " + label + "   R = " + f(conf.R, 3) : "gear " + label + "   \u2014 no gear engaged"), 12, 26);
+  ctx.fillStyle = COL.ink; ctx.font = "600 11px system-ui";
+  ctx.fillText(st.aRange === "D" ? "auto-shift schedule: 1\u21922 @22, 2\u21923 @42, 3\u21924 @66 km/h" :
+               st.aRange === "R" ? "reverse \u2014 carrier held, ring turns backwards" :
+               st.aRange === "P" ? "park \u2014 gearbox locked" : "", 12, 44);
+}
+
+function drawAnnulus(ctx, x, y, ro, ri, depth, color, name, rot, isDirect) {
+  var dark = shade(color, -30);
+  ctx.beginPath(); ctx.arc(x, y + depth, ro, 0, TAU); ctx.arc(x, y + depth, ri, 0, TAU, true); ctx.closePath();
+  ctx.fillStyle = dark; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, ro, 0, TAU); ctx.arc(x, y, ri, 0, TAU, true); ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,.14)"; ctx.lineWidth = 1.4; ctx.stroke();
+  if (isDirect) {
+    ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, (ro + ri) / 2, 0, TAU); ctx.stroke();
+  }
+}
+function drawTorqueConverter(ctx, x, y, R, active) {
+  // casing
+  ctx.beginPath(); ctx.ellipse(x, y, R * 0.62, R, 0, 0, TAU);
+  ctx.fillStyle = "#dfe4ee"; ctx.fill();
+  ctx.strokeStyle = "#9aa3b5"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x, y + 8, R * 0.62, R, 0, 0, TAU);
+  ctx.fillStyle = "rgba(120,132,154,.5)"; ctx.fill();
+  // inner wheels: impeller + turbine separated by a dash of "fluid"
+  ctx.beginPath(); ctx.arc(x - R * 0.16, y, R * 0.4, 0, TAU);
+  ctx.fillStyle = active ? "#3457d5" : "#c3cad8"; ctx.fill();
+  ctx.beginPath(); ctx.arc(x + R * 0.16, y, R * 0.36, 0, TAU);
+  ctx.fillStyle = active ? "#0e9f6e" : "#c3cad8"; ctx.fill();
+  ctx.font = "700 10px system-ui"; ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("E", x - R * 0.16, y + 3);
+  ctx.fillText("T", x + R * 0.16, y + 3);
+}
+
+/* ---------------- canvas driver ---------------- */
+var cv = $("#mechCanvas");
+var ctx2 = cv.getContext("2d");
+function layoutCanvas() {
+  var dpr = window.devicePixelRatio || 1;
+  var W = cv.clientWidth || 900, H = cv.clientHeight || 400;
+  var bw = Math.max(1, Math.round(W * dpr)), bh = Math.max(1, Math.round(H * dpr));
+  if (bw !== cv.width || bh !== cv.height) { cv.width = bw; cv.height = bh; }
+  ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { W: W, H: H };
+}
+function renderCanvas() {
+  var L = layoutCanvas();
+  ctx2.fillStyle = "#fdfefe"; ctx2.fillRect(0, 0, L.W, L.H);
+  ctx2.lineCap = "round";
+  if (st.mode === "manual") drawManual(ctx2, L.W, L.H);
+  else drawAutomatic(ctx2, L.W, L.H);
+}
+function renderAll() { updateModeChrome(); updateReadouts(); renderCanvas(); }
+
+/* ---------------- legend ---------------- */
+function drawLegend() {
+  var el = $("#legendBox"); if (!el) return;
+  if (st.mode === "manual") {
+    el.innerHTML =
+      '<span><span class="dot" style="background:var(--blue)"></span><b>input gear</b> · clutch side</span>' +
+      '<span><span class="dot" style="background:#9aa3b5"></span><b>countershaft</b> · reverses the turn</span>' +
+      '<span><span class="dot" style="background:var(--amber)"></span><b>output gear</b> · to final drive (amber = locked in)</span>' +
+      '<span><span class="dot" style="background:#e0695a"></span><b>clutch discs</b> · gap = clutch open</span>';
+  } else {
+    el.innerHTML =
+      '<span><span class="dot" style="background:var(--blue)"></span><b>sun</b> · centre gear</span>' +
+      '<span><span class="dot" style="background:var(--amber)"></span><b>planets</b> · ride the carrier</span>' +
+      '<span><span class="dot" style="background:var(--green)"></span><b>ring</b> · outer gear (internal teeth)</span>' +
+      '<span><span class="dot" style="background:#7a8498"></span><b>carrier</b> · holds the planets</span>';
+  }
+}
+
+/* ---------------- controls ---------------- */
+function bindControls() {
+  $("#tabManual").addEventListener("click", function () { setMode("manual"); });
+  $("#tabAuto").addEventListener("click", function () { setMode("automatic"); });
+  // H-pattern
+  var hpat = $("#hpattern");
+  hpat.addEventListener("click", function (ev) {
+    var b = ev.target.closest(".hg"); if (!b) return;
+    selectGearManual(b.dataset.g);
+  });
+  $("#btnN").addEventListener("click", function () { selectGearManual("N"); });
+  // clutch
+  function toggleClutch(inv) {
+    st.clutchIn = inv !== undefined ? !!inv : !st.clutchIn;
+    updateModeChrome();
+    if (!st.clutchIn && st.mPos === 0 && st.engOn) { /* fine, idle in neutral */ }
+  }
+  $("#btnClutch").addEventListener("click", function () { toggleClutch(); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.code === "Space" || ev.code === "KeyC") {
+      ev.preventDefault(); toggleClutch(true);
+      var ae = document.activeElement;
+      if (ae && ae.blur && ae.tagName === "BUTTON") ae.blur();   // stop Space re-clicking a gear button
+    }
+  });
+  document.addEventListener("keyup", function (ev) {
+    if (ev.code === "Space" || ev.code === "KeyC") { toggleClutch(false); }
+  });
+  // auto ranges
+  var sels = document.querySelectorAll(".sel-gear");
+  for (var i = 0; i < sels.length; i++) {
+    sels[i].addEventListener("click", function () { setRangeAuto(this.dataset.range); });
+  }
+  // shared sliders
+  function slider(id, outId, fn, fmt) {
+    var el = $(id), o = $(outId);
+    el.addEventListener("input", function () {
+      fn(parseFloat(el.value) / 100);
+      o.textContent = fmt(parseFloat(el.value));
+    });
+  }
+  slider("#thrIn", "#thrVal", function (u) { st.throttle = u; }, function (v) { return Math.round(v) + "%"; });
+  slider("#simSpeed", "#simSpeedVal", function (s) { st.timeScale = s; }, function (v) { return f(v, 2) + "\u00d7"; });
+  var play = $("#btnPlay");
+  play.addEventListener("click", function () {
+    st.running = !st.running;
+    play.textContent = st.running ? "\u275A\u275A\u00a0 Pause" : "\u25B6\u00a0 Play";
+    play.setAttribute("aria-pressed", st.running ? "true" : "false");
+  });
+  $("#btnReset").addEventListener("click", function () { reset(); });
+  window.addEventListener("resize", function () { renderCanvas(); });
+}
+
+function reset() {
+  st.engOn = true; st.eng = IDLE * Math.PI / 30; st.wheel = 0; st.tSim = 0;
+  st.mPos = 0; st.clutchIn = false; st.clutchFrac = 1; st.angA = 0;
+  st.aRange = "D"; st.aGear = 1; st.grindT = 0;
+  st.aSun = 0; st.aRing = 0; st.aCarrier = 0; st.aPlanet = 0;
+  st.slip = 0; st.tr = 1;
+  st.throttle = 0.15;
+  var el = $("#thrIn"); el.value = 15; $("#thrVal").textContent = "15%";
+  setWarn("Reset. Follow the tips for the current mode.", "ok");
+  animateKnob(null);
+  renderAll();
+}
+
+/* ---------------- main loop ---------------- */
+function frame(now) {
+  if (st.lastT === null) st.lastT = now;
+  var dtR = (now - st.lastT) / 1000; st.lastT = now;
+  if (dtR > 0.05) dtR = 0.05;
+  if (st.running) {
+    var dt = dtR * st.timeScale;
+    st.tSim += dt;
+    if (st.mode === "manual") stepManual(dt); else stepAuto(dt);
+    if (st.grindT > 0) st.grindT -= dtR;
+    if (st.protectT > 0) st.protectT -= dtR;
+    if (st.gearChgT > 0) st.gearChgT -= dtR;
+  }
+  updateReadouts();
+  drawLegend();
+  renderCanvas();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- boot ---------------- */
+function boot() {
+  st.eng = IDLE * Math.PI / 30;
+  bindControls();
+  setMode("manual");
+  updateModeChrome(); updateReadouts(); drawLegend();
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- self-test ---------------- */
+function runSelfTest() {
+  var log = [];
+  function ok(c, m) { log.push((c ? "PASS " : "FAIL ") + m); }
+  function near(x, ref, tol) { return Math.abs(x - ref) <= (tol || 1e-9); }
+  try {
+    ok(near(currentRatio(), 0), "manual starts in neutral (ratio 0)");
+    // Willis cases at k=2.5
+    var s1 = autoSpeeds(AUTO[0], 1);            // hold ring, input sun
+    ok(near(s1.sun, 1) && near(s1.carrier, 1 / 3.5) && near(s1.ring, 0), "planetary 1st: hold ring -> carrier at sun/(1+k)");
+    ok(near(1 / s1.carrier, 3.5), "1st ratio = 3.5 (input/output)");
+    var s2 = autoSpeeds(AUTO[1], 1);            // hold sun, input ring
+    ok(near(s2.carrier, 2.5 / 3.5) && near(1 / s2.carrier, 1.4), "2nd ratio = 1.4");
+    var s3 = autoSpeeds(AUTO[3], 1);            // hold sun, input carrier -> ring = (1+k)/k
+    ok(near(s3.ring, 3.5 / 2.5) && near(1 / s3.ring, K / (1 + K)), "4th (OD) ratio = k/(1+k) = 0.714");
+    var sr = autoSpeeds(AUTO_REV, 1);           // hold carrier, input sun
+    ok(near(sr.ring, -1 / K), "reverse: ring turns opposite at 1/k");
+    // Willis identity holds for direct 3rd at a random sample
+    var g = AUTO[2];
+    var sp = autoSpeeds(g, 3.7);
+    ok(g.direct && near(sp.sun, 3.7) && near(sp.ring, 3.7) && near(sp.carrier, 3.7),
+       "3rd direct: whole set turns together");
+    var identity = sp.sun + K * sp.ring - (1 + K) * sp.carrier;
+    ok(near(identity, 0, 1e-6), "Willis identity: sun + k*ring = (1+k)*carrier");
+    // planet mesh sizes
+    ok(TEETH_R === TEETH_S + 2 * TEETH_P, "ring teeth = sun + 2*planet (60 = 24 + 2*18)");
+    // manual ratios increase engine torque, reduce speed
+    var t1 = manualRatio(); // 0 (neutral) — set 1st then check
+    st.mPos = 1;
+    ok(near(manualRatio(), MAN[0].R), "manual 1st ratio 3.55");
+    st.mPos = 5;
+    ok(near(manualRatio(), MAN[4].R), "manual 5th ratio 0.77 (overdrive)");
+    st.mPos = -1;
+    ok(manualRatio() < 0 && near(Math.abs(manualRatio()), MAN_REV), "reverse ratio signed negative");
+    st.mPos = 0;
+    ok(typeof t1 === "number", "neutral helper runs");
+    // shift schedule order monotonic
+    ok(UP_SHIFT[0] < UP_SHIFT[1] && UP_SHIFT[1] < UP_SHIFT[2], "upshift thresholds increase");
+    ok(DOWN_SHIFT[0] < DOWN_SHIFT[1] && DOWN_SHIFT[1] < DOWN_SHIFT[2], "downshift thresholds increase");
+    ok(UP_SHIFT[0] > DOWN_SHIFT[0], "hysteresis: up > down at each boundary");
+    // DOM & API
+    ok(!!cv.getContext("2d"), "mechanism canvas has 2d context");
+    ok($("#hpattern") && $("#btnClutch") && $("#warnBox"), "manual DOM controls present");
+    ok($("#agClutch") && $("#statTC"), "automatic DOM controls present");
+    ok(typeof gearLabel() === "string" && typeof ratioText() === "string", "readout helpers return strings");
+  } catch (err) {
+    log.push("EXCEPTION " + (err && err.message));
+  }
+  reset();
+  var pre = $("#selftest-out");
+  if (pre) pre.textContent = log.join("\n") + "\nSELFTEST_DONE";
+  if (window.console && console.log) console.log(log.join("\n"));
+}
+
+boot();
+if (window.location.hash === "#selftest") runSelfTest();
+
+/* seam for embedding / headless checks */
+window.TransAPI = {
+  engRpm: function () { return rpmOf(st.eng); },
+  gear: function () { return gearLabel(); },
+  ratio: function () { return currentRatio(); },
+  speedKmh: function () { return vehSpeedKmh(); },
+  wheelRad: function () { return st.wheel; },
+  throttle: function () { return st.throttle; },
+  mode: function () { return st.mode; },
+  aRange: function () { return st.aRange; },
+  engOn: function () { return st.engOn; },
+  autoSpeeds: autoSpeeds,
+  manualRatio: manualRatio
+};
+})();
+</script>
+</body>
+</html>
