@@ -31,6 +31,10 @@
   .top-note{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:14px}
   .top-note .pill{background:#eef1f8;border:1px solid var(--line);color:var(--muted);
     border-radius:999px;padding:3px 10px;font-weight:600}
+  .top-note a.nav{background:#fff;border:1px solid var(--blue);color:var(--blue);
+    border-radius:999px;padding:3px 11px;font-weight:650;text-decoration:none;white-space:nowrap;
+    transition:background .12s,color .12s}
+  .top-note a.nav:hover{background:var(--blue);color:#fff}
 
   /* ---------- intro ---------- */
   main{padding:22px 0 48px}
@@ -190,7 +194,7 @@
 <header class="topbar">
   <div class="wrap">
     <div class="brand"><span class="mark">&#9881;</span>Gear Lab &amp; Linkages <small>&nbsp;·&nbsp; one motor drives the whole mechanism</small></div>
-    <div class="top-note"><span class="pill">ideal gearbox · no losses · exact kinematics</span></div>
+    <div class="top-note"><span class="pill">ideal gearbox · no losses · exact kinematics</span><a class="nav" href="transmission-sim.html">Transmission Lab &#8599;</a></div>
   </div>
 </header>
 
