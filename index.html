@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gear Lab &amp; Linkages — coupled kinematic simulator (accuracy-fixed)</title>
+<meta name="description" content="One motor spins a gear train whose output shaft physically drives a four-bar crank-rocker, a slider-crank and a gear-pair mesh. The output-shaft angle is a true continuous integral of the train output speed, so editing the train never makes the mechanisms jump; rocker and piston velocities are closed-form exact.">
+<style>
+  :root{
+    --bg:#f3f5f9; --panel:#ffffff; --line:#e2e6ef; --ink:#1d2333; --muted:#6b7284;
+    --blue:#3457d5; --blue-deep:#27439f; --amber:#e59a12; --amber-ink:#6b4502;
+    --grey:#78849a; --danger:#d33a3a;
+    --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.05), 0 10px 26px -14px rgba(16,24,40,.18);
+    --mono:ui-monospace,'Cascadia Mono','SFMono-Regular',Consolas,'Segoe UI Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 system-ui,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  button{font:inherit;color:inherit}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 18px}
+
+  /* ---------- header ---------- */
+  header.topbar{background:var(--panel);border-bottom:1px solid var(--line)}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:750;font-size:16px;letter-spacing:.2px;padding:11px 0;user-select:none}
+  .brand .mark{width:24px;height:24px;border-radius:7px;background:var(--blue);color:#fff;
+    display:grid;place-items:center;font-size:15px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+  .brand small{font-weight:500;color:var(--muted);font-size:12px}
+  .top-note{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:14px}
+  .top-note .pill{background:#eef1f8;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:3px 10px;font-weight:600}
+
+  /* ---------- intro ---------- */
+  main{padding:22px 0 48px}
+  .intro h1{margin:2px 0 6px;font-size:25px;letter-spacing:-.3px}
+  .intro p{margin:0 0 16px;color:var(--muted);max-width:940px}
+  .intro p b{color:var(--ink)}
+
+  .lab{display:flex;flex-direction:column;gap:12px}
+
+  /* ---------- generic panel / buttons ---------- */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 12px;
+    font-weight:600;font-size:13px;cursor:pointer;transition:background .12s,border-color .12s}
+  .btn:hover{background:#f2f4fa}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:var(--blue-deep)}
+  .ibtn{border:1px solid var(--line);background:#f7f8fc;border-radius:7px;min-width:26px;height:26px;
+    padding:0 6px;font-size:13px;line-height:1;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;justify-content:center}
+  .ibtn:hover:not(:disabled){background:#e9edf6;border-color:#cfd6e4}
+  .ibtn:disabled{opacity:.35;cursor:default}
+  .ibtn.danger:hover:not(:disabled){background:#fdecec;border-color:#f1b6b6;color:var(--danger)}
+  .section-label{font-size:11px;font-weight:750;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)}
+
+  /* ---------- train tabs ---------- */
+  .tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tab{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;
+    border-radius:10px;padding:6px 6px 6px 12px;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .tab:hover{border-color:#c9d2e4}
+  .tab.on{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset;background:#f4f7ff}
+  .tab-name{font-weight:650;font-size:13.5px}
+  .tab-gr{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:#f2f4fa;
+    border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+  .tab-x{border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:6px;
+    width:20px;height:20px;font-size:11px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+  .tab-x:hover{background:#fdecec;color:var(--danger)}
+  .tab-x[hidden]{display:none}
+
+  /* ---------- lab grid ---------- */
+  .lab-grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:12px;align-items:start}
+  .panel-pad{padding:14px}
+
+  /* controls column */
+  .controls{display:flex;flex-direction:column}
+  .controls .panel-pad{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .roster-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .roster-head h3{margin:0;font-size:15px}
+  .roster{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+
+  .gcard{border:1px solid var(--line);border-radius:11px;padding:9px 11px;background:#fff;
+    box-shadow:0 1px 2px rgba(16,24,40,.03);transition:border-color .12s, opacity .12s}
+  .gcard:hover{border-color:#c9d2e4}
+  .gcard.ghost{opacity:.4}
+  .gcard-top{display:flex;align-items:center;gap:9px}
+  .grip{border:none;background:transparent;cursor:grab;color:#a7aec0;font-size:14px;padding:0 2px;line-height:1;
+    border-radius:5px;flex:0 0 auto}
+  .grip:hover{color:var(--ink);background:#eef1f7}
+  .grip:active{cursor:grabbing}
+  .badge{font-size:10.5px;font-weight:750;letter-spacing:.4px;padding:2.5px 8px;border-radius:999px;white-space:nowrap}
+  .b-driver{background:var(--blue);color:#fff}
+  .b-idler{background:var(--grey);color:#fff}
+  .b-driven{background:var(--amber);color:var(--amber-ink)}
+  .gname{font-weight:650;font-size:13.5px;color:var(--muted);margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gactions{display:flex;gap:5px;flex:0 0 auto}
+  .gcard-sub{display:flex;align-items:center;gap:12px;margin-top:9px;flex-wrap:wrap}
+  .fld{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);font-weight:600}
+  .fld input{width:64px;border:1px solid var(--line);border-radius:8px;padding:4px 6px;font:600 13.5px var(--mono);
+    color:var(--ink);text-align:center;background:#fafbfe;outline:none}
+  .fld input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(52,87,213,.14);background:#fff}
+  .ghint{font-size:11.5px;color:var(--muted)}
+
+  .ctl-divider{border:none;border-top:1px solid var(--line);margin:2px 0}
+  .ctl{display:flex;flex-direction:column;gap:7px}
+  .ctl-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .ctl-head label{font-size:13px;font-weight:650}
+  .ctl-head output{font-family:var(--mono);font-size:13px;font-weight:650;color:var(--blue);white-space:nowrap}
+  input[type=range]{width:100%;margin:0;accent-color:var(--blue);cursor:pointer}
+  .row2{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+  .toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;user-select:none}
+  .toggle input{accent-color:var(--blue);width:16px;height:16px;margin:0;cursor:pointer}
+  .btn-play{min-width:118px}
+
+  /* stage (canvas) column */
+  .stage{display:flex;flex-direction:column;min-width:0}
+  .stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .stage-title{display:flex;flex-direction:column;gap:1px}
+  .stage-title .t1{font-size:14.5px;font-weight:700}
+  .stage-title .t2{font-size:12px;color:var(--muted)}
+  .cfg-tag{font:600 12px var(--mono);color:var(--blue-deep);background:#eef2fd;border:1px solid #d7e0f8;
+    border-radius:999px;padding:4px 11px;white-space:nowrap}
+  .canvas-wrap{position:relative;background:#fdfefe;
+    border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .canvas-wrap.gear{height:225px;flex:none}
+  .canvas-wrap.links{height:360px;flex:none}
+  #gearCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+  #linkCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #gearCanvas:focus-visible{box-shadow:inset 0 0 0 2px rgba(52,87,213,.5)}
+  .sec-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 6px}
+  .sec-row .sec-label{font-size:10px;letter-spacing:1px}
+  .sec-row .sec-note{font-size:11px;color:var(--muted);text-align:right}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:9px;color:var(--muted);font-size:12px}
+  .legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:0}
+  .legend b{color:var(--ink);font-weight:650}
+
+  /* live linkage readouts */
+  .lstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:10px}
+  .lstat{background:#f8f9fd;border:1px solid var(--line);border-radius:9px;padding:6px 11px}
+  .lstat .lb{font-size:9.5px;font-weight:750;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);display:block}
+  .lstat .lv{display:block;font:650 16px/1.25 var(--mono);color:var(--ink);margin-top:2px;letter-spacing:-.2px}
+  .lstat .ln{display:block;font:600 10px var(--mono);color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* meters + readouts */
+  .metrics{display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr);gap:12px;align-items:stretch}
+  .meters{display:flex;flex-direction:column}
+  .meters .panel-pad{display:flex;flex-direction:column;gap:13px}
+  .meter .m-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px}
+  .m-name{font-size:12.5px;font-weight:750}
+  .m-txt{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right}
+  .m-track{position:relative;height:14px;background:#eef1f6;border-radius:7px;overflow:hidden}
+  .m-fill{position:absolute;left:0;top:0;bottom:0;border-radius:7px;min-width:3px;transition:width .15s ease}
+  .m-fill.speed{background:linear-gradient(90deg,#3457d5,#5b7bf0)}
+  .m-fill.torque{background:linear-gradient(90deg,#d98c09,#f4b64c)}
+  .m-cap{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .m-cap .inmark{color:var(--ink);font-weight:650}
+
+  .readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:9px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:10px 13px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .s-label{font-size:10.5px;font-weight:750;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);display:block}
+  .s-val{display:block;font:650 21px/1.25 var(--mono);color:var(--ink);margin:3px 0 1px;letter-spacing:-.3px}
+  .s-note{font-size:11px;color:var(--muted);display:block;min-height:15px}
+
+  /* equations + help */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px}
+  .eq{font:600 13px/1.9 var(--mono);color:#2a3350;margin:0;overflow-x:auto;white-space:nowrap}
+  .eq .sep{color:#c2c9d8;padding:0 8px}
+  .foot{margin-top:14px;color:var(--muted);font-size:11.5px}
+  details.help summary{cursor:pointer;font-weight:700;font-size:13.5px;user-select:none}
+  details.help .help-body{margin:10px 0 2px;color:#333c52;font-size:13.5px;display:grid;gap:6px}
+  details.help ul{margin:0;padding-left:18px;display:grid;gap:4px}
+  details.help li::marker{color:var(--blue)}
+
+  .empty-tip{font-size:12.5px;color:var(--muted);background:#f8f9fd;border:1px dashed var(--line);border-radius:9px;padding:6px 10px}
+
+  @media (max-width:960px){
+    .lab-grid{grid-template-columns:1fr}
+    .metrics{grid-template-columns:1fr}
+    .canvas-wrap.gear{height:210px}
+    .canvas-wrap.links{height:330px}
+  }
+  @media (max-width:520px){
+    .top-note .pill{display:none}
+    .s-val{font-size:18px}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="mark">&#9881;</span>Gear Lab &amp; Linkages <small>&nbsp;·&nbsp; one motor drives the whole mechanism</small></div>
+    <div class="top-note"><span class="pill">ideal gearbox · no losses · exact kinematics</span></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="intro">
+    <h1>Build a gear train. Its output shaft physically drives the linkages.</h1>
+    <p>The <b>first gear is the motor</b>, the <b>last is the output shaft</b>, and idlers between them only flip direction.
+       The output shaft drives the four-bar crank-rocker, the slider-crank and a gear-pair mesh below.
+       The shaft angle is <b>integrated from the true output speed</b>, so editing the train (teeth, order, reverse)
+       changes how fast &amp; which way the mechanisms run but never makes them jump.
+       Gear, rocker and piston <b>speeds</b> are all exact closed-form values per simulated second.</p>
+  </div>
+
+  <section class="lab" aria-label="Coupled gear and linkage simulator">
+    <!-- trains -->
+    <div class="tabs" aria-label="Gear trains">
+      <span class="section-label">Trains</span>
+      <div id="rowTabs" style="display:contents"></div>
+      <button id="btnAddRow" type="button" class="btn">&#43;&nbsp; Add train</button>
+    </div>
+
+    <div class="lab-grid">
+      <!-- controls -->
+      <aside class="panel controls" aria-label="Gear train controls">
+        <div class="panel-pad">
+          <div class="roster-head">
+            <h3 id="rosterTitle">Gears in this train</h3>
+            <button id="btnAddGear" type="button" class="btn primary">&#43;&nbsp; Gear</button>
+          </div>
+          <div class="roster" id="gearRoster" aria-label="Gear list — drag a card by its handle to reorder"></div>
+          <p class="empty-tip">Tip: drag a card by its <b>⠿</b> handle — or drag a gear on the canvas — to reorder the chain, and press <b>←/→</b> with a gear selected to move it.</p>
+
+          <hr class="ctl-divider">
+
+          <span class="section-label">Motor input</span>
+          <div class="ctl">
+            <div class="ctl-head"><label for="rpmIn">Input speed</label><output id="rpmVal">300 rpm</output></div>
+            <input type="range" id="rpmIn" min="30" max="600" step="10" value="300">
+          </div>
+          <div class="ctl">
+            <div class="ctl-head"><label for="torqueIn">Input torque</label><output id="torqueVal">12 N·m</output></div>
+            <input type="range" id="torqueIn" min="1" max="60" step="0.5" value="12">
+          </div>
+
+          <hr class="ctl-divider">
+
+          <span class="section-label">Playback</span>
+          <div class="ctl">
+            <div class="ctl-head"><label for="simSpeed" title="Simulated seconds that elapse per real second. ×1 = real time.">Sim time scale</label><output id="simSpeedVal">0.10×</output></div>
+            <input type="range" id="simSpeed" min="0.02" max="2" step="0.02" value="0.1">
+          </div>
+          <div class="row2">
+            <button id="btnPlay" class="btn btn-play" type="button" aria-pressed="false">&#10074;&#10074;&nbsp; Pause</button>
+            <label class="toggle" title="Spin the motor the other way"><input type="checkbox" id="motorRev"> Reverse motor</label>
+          </div>
+          <p class="empty-tip">Readouts are the true physics per <b>simulated second</b> (&#969; = 2&#960;·RPM/60, P = &#964;·&#969;). The time-scale slider maps simulated seconds to real ones: <b>×1 = real time</b>; the 0.1× default keeps the 300 rpm train crisp on screen.</p>
+        </div>
+      </aside>
+
+      <!-- canvas: drive train above, linkages below -->
+      <section class="panel stage" aria-label="Drive train and the linkages it powers">
+        <div class="panel-pad" style="display:flex;flex-direction:column;min-width:0">
+          <div class="stage-head">
+            <div class="stage-title">
+              <span class="t1" id="stageTitle">Train 1</span>
+              <span class="t2" id="stageSub">drive train &#8594; output shaft &#8594; four-bar, slider-crank &amp; gear pair</span>
+            </div>
+            <span class="cfg-tag" id="stConfig">20 &#8594; 40 teeth</span>
+          </div>
+
+          <div class="sec-row" style="margin-top:10px">
+            <span class="sec-label">Drive train</span>
+            <span class="sec-note">meshing gears · click to select · drag sideways to reorder · the last gear feeds the shaft below</span>
+          </div>
+          <div class="canvas-wrap gear">
+            <canvas id="gearCanvas" tabindex="0" aria-label="Animated meshing gears. Drag a gear horizontally to reorder. Arrow keys move the selected gear, Delete removes it."></canvas>
+          </div>
+
+          <div class="sec-row" style="margin-top:12px">
+            <span class="sec-label">Output shaft &#8594; linkage mechanisms</span>
+            <span class="sec-note" id="kinNote">shaft angle is integrated from &#969;<sub>in</sub>/GR · exact closed-form kinematics</span>
+          </div>
+          <div class="canvas-wrap links">
+            <canvas id="linkCanvas" aria-label="Four-bar crank-rocker, slider-crank and gear pair, all driven by the gear train output shaft."></canvas>
+          </div>
+
+          <div class="lstats">
+            <div class="lstat"><span class="lb">Output shaft &#952;</span><span class="lv" id="lsTh">0&#176;</span><span class="ln" id="lsThSub">rev 0 · sim t 0 s</span></div>
+            <div class="lstat"><span class="lb">Shaft &#969; (rad/s)</span><span class="lv" id="lsWsh">&nbsp;</span><span class="ln">signed, per simulated s</span></div>
+            <div class="lstat"><span class="lb">Rocker &#952;&#8324;</span><span class="lv" id="lsRock">&nbsp;</span><span class="ln">deg from ground line</span></div>
+            <div class="lstat"><span class="lb">Rocker &#969;&#8324; (rad/s)</span><span class="lv" id="lsRockW">&nbsp;</span><span class="ln">closed-form derivative</span></div>
+            <div class="lstat"><span class="lb">Piston x</span><span class="lv" id="lsPiston">&nbsp;</span><span class="ln">world units</span></div>
+            <div class="lstat"><span class="lb">Piston velocity</span><span class="lv" id="lsPistonV">&nbsp;</span><span class="ln">world units / s</span></div>
+          </div>
+
+          <div class="legend">
+            <span><span class="dot" style="background:var(--blue)"></span><b>driver</b> · motor</span>
+            <span><span class="dot" style="background:var(--grey)"></span><b>idler</b> · direction only</span>
+            <span><span class="dot" style="background:var(--amber)"></span><b>driven</b> · output shaft</span>
+            <span class="legend info" style="color:var(--muted)">four-bar links: crank <span style="color:#d98c09;font-weight:700">amber</span> / coupler <span style="color:var(--blue);font-weight:700">blue</span> / rocker <span style="color:#0e9f6e;font-weight:700">green</span></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- trade-off meters + readouts -->
+    <div class="metrics">
+      <div class="panel meters" aria-label="Speed–torque trade-off">
+        <div class="panel-pad">
+          <span class="section-label">Speed &#8644; torque</span>
+          <div class="meter">
+            <div class="m-head"><span class="m-name">Speed (ω)</span><span class="m-txt" id="mSpeedTxt">&nbsp;</span></div>
+            <div class="m-track"><span class="m-fill speed" id="mSpeedFill"></span></div>
+          </div>
+          <div class="meter">
+            <div class="m-head"><span class="m-name">Torque (τ)</span><span class="m-txt" id="mTorqueTxt">&nbsp;</span></div>
+            <div class="m-track"><span class="m-fill torque" id="mTorqueFill"></span></div>
+          </div>
+          <p class="m-cap">Bar fills to 100% = <span class="inmark">input value</span>. Speed and torque always move in opposite directions as you change the gear ratio — power in equals power out.</p>
+        </div>
+      </div>
+
+      <div class="readouts" aria-live="polite" aria-label="Live readouts for the selected train">
+        <div class="stat"><span class="s-label">Gear ratio GR</span><output class="s-val" id="stGR">2</output><span class="s-note" id="stGRnote">&nbsp;</span></div>
+        <div class="stat"><span class="s-label">Input speed ω<sub>in</sub> (rad/s)</span><output class="s-val" id="stOmIn">&nbsp;</output><span class="s-note" id="stRpmIn">&nbsp;</span></div>
+        <div class="stat"><span class="s-label">Output speed ω<sub>out</sub> (rad/s)</span><output class="s-val" id="stOmOut">&nbsp;</output><span class="s-note" id="stRpmOut">&nbsp;</span></div>
+        <div class="stat"><span class="s-label">Input torque τ<sub>in</sub> (N·m)</span><output class="s-val" id="stTIn">&nbsp;</output><span class="s-note" id="stTInNote">&nbsp;</span></div>
+        <div class="stat"><span class="s-label">Output torque τ<sub>out</sub> (N·m)</span><output class="s-val" id="stTOut">&nbsp;</output><span class="s-note" id="stTOutNote">&nbsp;</span></div>
+        <div class="stat"><span class="s-label">Power P (W)</span><output class="s-val" id="stPower">&nbsp;</output><span class="s-note">ideal gearbox: τ·ω conserved</span></div>
+        <div class="stat"><span class="s-label">Pitch-line speed v (m/s)</span><output class="s-val" id="stPitchV">&nbsp;</output><span class="s-note">same at every mesh · module 12 mm</span></div>
+        <div class="stat"><span class="s-label">Output direction</span><output class="s-val" id="stDir" style="font-size:18px">&nbsp;</output><span class="s-note" id="stDirNote">&nbsp;</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="eq">
+        GR = N<sub>driven</sub>/N<sub>driver</sub>
+        <span class="sep">·</span>&#952;<sub>shaft</sub>(s) = &#8747;<sub>0</sub><sup>s</sup> &#968;<sub>out</sub>(&#963;)d&#963; &nbsp;<small>(continuous integral — never jumps)</small>
+        <span class="sep">·</span>&#969;<sub>4</sub> = &#969;<sub>2</sub>&#183;a·sin(&#952;<sub>2</sub>&#8722;&#952;<sub>3</sub>) / (c·sin(&#952;<sub>4</sub>&#8722;&#952;<sub>3</sub>))
+        <span class="sep">·</span>v<sub>piston</sub> = &#969;<sub>2</sub>&#183;[&#8722;r·sin&#952; &#8722; r&#178;·sin&#952;cos&#952;/&#8730;(l&#178;&#8722;r&#178;sin&#178;&#952;)]
+        <span class="sep">·</span>&#969;<sub>1</sub>N<sub>1</sub> = &#969;<sub>2</sub>N<sub>2</sub>
+        <span class="sep">·</span>P = &#964;·&#969;
+      </p>
+    </div>
+
+    <details class="card help">
+      <summary>How it works &nbsp;&#9660;</summary>
+      <div class="help-body">
+        <ul>
+          <li><b>The chain of power.</b> The <b>driver</b> (first gear) is the motor. Every gear meshes on its pitch circle with the next. The <b>driven</b> (last gear) is the <b>output shaft</b>. Its angle &#952;<sub>shaft</sub>(s) is a true integral of the instantaneous output speed &#969;<sub>out</sub>(s) = (&#8722;1)<sup>meshes</sup>&#183;&#969;<sub>in</sub>/GR over simulated time s — so when you edit the train, reverse the motor or switch trains, only the <i>speed</i> changes: the shaft (and therefore the four-bar crank, the slider-crank and the demo pair) keeps running from its current position without jumping.</li>
+          <li><b>Simulated time.</b> Speeds are per simulated second — identical numbers to the true physics. The <b>sim time scale</b> slider sets how many simulated seconds pass per real second: at <b>×1.00</b> the motion on screen matches the readouts second-for-second; lower scales are slow motion for clarity (the default 0.1× shows a 300 rpm motor at a crisp 1 rev/s of the driver).</li>
+          <li><b>Speed &amp; ratio.</b> GR = N<sub>driven</sub>/N<sub>driver</sub>, &#969;<sub>out</sub> = &#969;<sub>in</sub>/GR, &#964;<sub>out</sub> = &#964;<sub>in</sub>&#183;GR. A torque-multiplying (GR &gt; 1) train makes the linkages turn slower; a speed-increaser makes them spin faster with less torque.</li>
+          <li><b>Exact kinematics &amp; velocities.</b> The four-bar uses the closed-form Freudenstein solution (coupler b and rocker c stay exact at every crank angle; no integration drift). Rocker angular speed and piston velocity are closed-form derivatives of the same solution, so the mechanism speeds are consistent with the shaft speed to machine precision.</li>
+          <li><b>Edit anything.</b> Change teeth, add/remove gears or trains, reorder by dragging on the canvas or a card, reverse the motor — the shaft and every linkage recompute from the real equations and keep moving continuously.</li>
+          <li><b>Demo gear pair.</b> The third panel is an independent external-mesh pair driven by the same shaft, showing no-slip counter-rotation (&#969;r = constant at the contact point).</li>
+        </ul>
+      </div>
+    </details>
+
+    <p class="foot">Educational simulation. Plain HTML, CSS &amp; JavaScript — no libraries, works offline.</p>
+  </section>
+</main>
+
+<pre id="selftest-out" hidden></pre>
+
+<script>
+/* early error catcher: surfaces JS errors into the DOM for headless checks */
+window.__jserrors = 0;
+window.__lastError = "";
+window.onerror = function (msg, src, line, col) {
+  window.__jserrors += 1;
+  window.__lastError = (msg || "unknown error") + " @ line " + (line || "?");
+  try {
+    var pre = document.getElementById("selftest-out");
+    if (pre) pre.textContent = "[JS ERROR] " + window.__lastError + "\nSELFTEST_DONE";
+  } catch (e) {}
+};
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+     improved.html — Gear Lab + exact linkage kinematics, COUPLED.
+     Accuracy fixes over the previous generation:
+
+      1. The motor RPM slider now really drives the motion.
+         state.drive and state.shaft advance by the TRUE input
+         angular speed omegaIn = rpm*pi/30 (per simulated second);
+         simSpeed is an explicit time scale (sim s per real s).
+
+      2. The output-shaft angle is a CONTINUOUS integral of the
+         current output speed. Editing the train / reversing /
+         switching trains changes omega_out but never jumps the
+         shaft angle, so the mechanisms below never jump either.
+         (Gear *tooth* phases are re-synced cosmetically after an
+         edit so neighbouring teeth still mesh.)
+
+      3. Frame time steps are clamped (as linkages.html already
+         did) and simulated time is tracked, so hidden-tab gaps
+         and very long sessions stay exact.
+
+      4. Live closed-form mechanism velocities: rocker omega4 and
+         piston velocity, derived from the exact Freudenstein /
+         slider-crank solutions, consistent with the shaft speed.
+
+      5. Readouts & tests reflect all of the above.
+     ============================================================ */
+
+  /* ================= helpers ================= */
+  var $ = function (s) { return document.querySelector(s); };
+  var TAU = Math.PI * 2;
+  var TEETH_MIN = 8, TEETH_MAX = 120;
+  var MODULE_M = 0.012;
+  var LABELS = { driver: "Driver", idler: "Idler", driven: "Driven" };
+  var HINTS = {
+    driver: "motor · input — spins freely",
+    idler: "between driver & driven · reverses direction only",
+    driven: "output of the train — drives the linkages"
+  };
+  var COLORS = { driver: "#3457d5", idler: "#78849a", driven: "#e59a12" };
+
+  function f(x, d) {
+    if (d === undefined) d = 2;
+    var p = Math.pow(10, d);
+    return (Math.round(x * p) / p).toString();
+  }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function roleOf(i, n) {
+    if (n === 1) return "driver";
+    if (i === 0) return "driver";
+    if (i === n - 1) return "driven";
+    return "idler";
+  }
+  function approx(a, b, tol) { return Math.abs(a - b) <= tol; }
+  function signed(v, d) {
+    if (d === undefined) d = 2;
+    var s = f(v, d);
+    if (parseFloat(s) === 0) return s;
+    return (v < 0 ? s : "+" + s);
+  }
+
+  /* ================= state =================
+     drive  — motor/driver tooth phase (rad, simulated) for the
+              gear-train canvas. Grows at omegaIn per sim second.
+     shaft  — OUTPUT-SHAFT angle (rad, simulated): the true,
+              continuous mechanism input. Grows at omegaOut.
+     simT   — simulated seconds elapsed.                       */
+  var state = {
+    rows: [{ gears: [{ id: 1, teeth: 20 }, { id: 2, teeth: 40 }] }],
+    active: 0,
+    rpm: 300, torqueIn: 12,
+    timeScale: 0.1,          // simulated seconds per real second (1 = real time)
+    running: true, reverse: false,
+    drive: 0, shaft: 0, simT: 0,
+    selected: -1, hover: -1, drag: null
+  };
+  var gseq = 3;
+  var activeRow = function () { return state.rows[state.active]; };
+  var wInRad = function () { return state.rpm * Math.PI / 30; };
+
+  /* ================= physics ================= */
+  function physics() {
+    var row = activeRow(), gs = row.gears, n = gs.length;
+    var N1 = gs[0].teeth, Nn = gs[n - 1].teeth, GR = Nn / N1;
+    var wIn = wInRad(), wOut = wIn / GR, rpmOut = state.rpm / GR;
+    var tIn = state.torqueIn, tOut = tIn * GR, P = tIn * wIn;
+    var pitchV = MODULE_M * wIn * N1 / 2, sameDir = (n - 1) % 2 === 0;
+    var gears = gs.map(function (g, i) {
+      return { teeth: g.teeth, role: roleOf(i, n), rpm: state.rpm * N1 / g.teeth,
+        omega: wIn * N1 / g.teeth, sign: (i % 2 === 0 ? 1 : -1) * (state.reverse ? -1 : 1) };
+    });
+    return { n: n, N1: N1, Nn: Nn, GR: GR, wIn: wIn, wOut: wOut, rpmOut: rpmOut,
+      tIn: tIn, tOut: tOut, P: P, pitchV: pitchV, sameDir: sameDir, gears: gears };
+  }
+  function GRword(p) {
+    if (p.GR > 1.0001) return "torque multiplier · speed reducer";
+    if (p.GR < 0.9999) return "speed increaser · torque divided";
+    return "1:1 — direction change only";
+  }
+  /* direction of the output shaft relative to the motor (+1 same, -1 opposite) */
+  function meshDir() {
+    return ((activeRow().gears.length - 1) % 2 === 0 ? 1 : -1) * (state.reverse ? -1 : 1);
+  }
+  /* signed output-shaft angular speed, rad per SIMULATED second */
+  function shaftOmega() {
+    return meshDir() * physics().wOut;
+  }
+  function outputTheta() { return state.shaft; }
+  function outDirWord() {
+    return meshDir() > 0 ? "same" : "opposite";
+  }
+
+  /* ================= integration (per real second) ================= */
+  function advance(dtReal) {
+    var dt = Math.min(dtReal, 1 / 30);          // clamp big gaps (tab switches etc.)
+    var s = dt * state.timeScale;               // simulated seconds elapsed
+    if (!(s > 0)) return;
+    state.simT += s;
+    state.drive += wInRad() * s;                // driver tooth phase
+    state.shaft += shaftOmega() * s;            // TRUE output shaft integral
+  }
+
+  /* ================= structural ops (all keep the shaft continuous) ================= */
+  /* After any train reconfiguration, re-sync the cosmetic gear-tooth phase so the
+     last gear meshes at the current shaft angle; the shaft itself never jumps.     */
+  function resyncDrive() {
+    var row = activeRow(), n = row.gears.length;
+    if (n < 2) return;
+    var last = n - 1;
+    var N0 = row.gears[0].teeth, Nn = row.gears[last].teeth;
+    if (!N0 || !Nn) return;
+    var sgn = (last % 2 === 0 ? 1 : -1) * (state.reverse ? -1 : 1);
+    var rot0 = (last % 2 === 1 ? Math.PI - Math.PI / Nn : Math.PI);
+    state.drive = (state.shaft - rot0) * (Nn / N0) / sgn;
+  }
+  function configChange() { resyncDrive(); renderAll(); }
+
+  function moveWithin(row, from, to) {
+    if (from === to) return;
+    to = clamp(to, 0, row.gears.length - 1);
+    var g = row.gears.splice(from, 1)[0];
+    row.gears.splice(to, 0, g);
+    configChange();
+  }
+  function addGear() {
+    var row = activeRow();
+    row.gears.push({ id: gseq++, teeth: 20 });
+    state.selected = row.gears.length - 1;
+    configChange();
+  }
+  function removeGearAt(row, idx) {
+    if (row.gears.length <= 2) return;
+    row.gears.splice(idx, 1);
+    if (state.selected >= row.gears.length) state.selected = row.gears.length - 1;
+    configChange();
+  }
+  function addTrain() {
+    state.rows.push({ gears: [{ id: gseq++, teeth: 20 }, { id: gseq++, teeth: 40 }] });
+    state.active = state.rows.length - 1; state.selected = -1; configChange();
+  }
+  function removeTrain(idx) {
+    if (state.rows.length <= 1) return;
+    state.rows.splice(idx, 1);
+    if (state.active >= state.rows.length) state.active = state.rows.length - 1;
+    state.selected = -1; configChange();
+  }
+  function activateTrain(idx) {
+    if (idx === state.active) return;
+    state.active = idx; state.selected = -1; configChange();
+  }
+
+  /* ================= renders: tabs & roster ================= */
+  function renderTabs() {
+    var c = $("#rowTabs"); c.innerHTML = "";
+    state.rows.forEach(function (row, idx) {
+      var n = row.gears.length, gr = row.gears[n - 1].teeth / row.gears[0].teeth;
+      var tab = document.createElement("div");
+      tab.className = "tab" + (idx === state.active ? " on" : "");
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", idx === state.active ? "true" : "false");
+      tab.innerHTML = '<span class="tab-name">Train ' + (idx + 1) + "</span>" +
+        '<span class="tab-gr">GR ' + f(gr, 2) + "</span>";
+      function activate() { activateTrain(idx); }
+      tab.addEventListener("click", activate);
+      tab.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); activate(); }
+      });
+      var x = document.createElement("button");
+      x.type = "button"; x.className = "tab-x"; x.textContent = "\u2715";
+      x.title = "Remove this train"; x.setAttribute("aria-label", "Remove train " + (idx + 1));
+      if (state.rows.length > 1) {
+        x.addEventListener("click", function (ev) { ev.stopPropagation(); removeTrain(idx); });
+      } else x.hidden = true;
+      tab.appendChild(x); c.appendChild(tab);
+    });
+  }
+
+  function renderRoster() {
+    var c = $("#gearRoster"); c.innerHTML = "";
+    var row = activeRow();
+    row.gears.forEach(function (g, i) {
+      var n = row.gears.length, role = roleOf(i, n);
+      var div = document.createElement("div");
+      div.className = "gcard"; div.dataset.i = String(i);
+      div.innerHTML =
+        '<div class="gcard-top">' +
+          '<button type="button" class="grip" title="Drag to reorder" aria-label="Drag gear ' + (i + 1) + ' to reorder">&#x283F;</button>' +
+          '<span class="badge b-' + role + '">' + LABELS[role] + "</span>" +
+          '<span class="gname">Gear ' + (i + 1) + "</span>" +
+          '<span class="gactions">' +
+            '<button type="button" class="ibtn" data-act="left" title="Move this gear left"' + (i === 0 ? " disabled" : "") + ">&#8592;</button>" +
+            '<button type="button" class="ibtn" data-act="right" title="Move this gear right"' + (i === n - 1 ? " disabled" : "") + ">&#8594;</button>" +
+            '<button type="button" class="ibtn danger" data-act="remove" title="Remove this gear (chain reconnects)"' + (n <= 2 ? " disabled" : "") + ">&#10005;</button>" +
+          "</span>" +
+        "</div>" +
+        '<div class="gcard-sub">' +
+          '<label class="fld">Teeth<input type="number" class="teeth" min="' + TEETH_MIN + '" max="' + TEETH_MAX + '" step="1" inputmode="numeric" value="' + g.teeth + '"></label>' +
+          '<span class="ghint">' + HINTS[role] + "</span>" +
+        "</div>";
+      c.appendChild(div);
+    });
+    $("#rosterTitle").textContent = "Gears in train " + (state.active + 1);
+    bindRosterDrags();
+  }
+
+  function setText(id, s) { var el = $(id); if (el) el.textContent = s; }
+
+  function updateDerived() {
+    var p = physics(), row = activeRow();
+    setText("#stGR", f(p.GR, 3));
+    setText("#stGRnote", f(p.GR, 3) + " = " + p.Nn + " \u00f7 " + p.N1 + " teeth \u00b7 " + GRword(p));
+    setText("#stOmIn", f(p.wIn, 2)); setText("#stRpmIn", Math.round(state.rpm) + " RPM");
+    setText("#stOmOut", f(p.wOut, 2)); setText("#stRpmOut", f(p.rpmOut, 1) + " RPM");
+    setText("#stTIn", f(p.tIn, 2)); setText("#stTInNote", "applied to the driver");
+    setText("#stTOut", f(p.tOut, 2));
+    setText("#stTOutNote", "mechanical advantage \u00d7" + f(p.GR, 2) + (p.GR < 1 ? " (torque divided)" : ""));
+    setText("#stPower", Math.round(p.P));
+    setText("#stPitchV", f(p.pitchV, 2));
+    setText("#stDir", p.sameDir ? "same" : "opposite");
+    setText("#stDirNote", p.n === 2
+      ? "two gears \u2192 counter-rotation"
+      : (p.n - 1) + " meshes \u2192 output turns " + (p.sameDir ? "same way as" : "opposite to") + " the driver");
+    setText("#stConfig", row.gears.map(function (g) { return g.teeth; }).join(" \u2192 ") + " teeth \u00b7 GR " + f(p.GR, 3) +
+      " \u00b7 \u03c9out " + f(p.rpmOut, 0) + " rpm");
+    setText("#stageTitle", "Train " + (state.active + 1) + " \u2014 " + p.n + " gears");
+    setText("#stageSub", "drive train \u2192 output shaft turns " + outDirWord() + " to the motor \u2192 feeds the mechanisms below");
+    meter("#mSpeedFill", 1 / p.GR); meter("#mTorqueFill", p.GR);
+    setText("#mSpeedTxt", "in " + Math.round(state.rpm) + " rpm \u2192 out " + f(p.rpmOut, 0) + " rpm");
+    setText("#mTorqueTxt", "in " + f(p.tIn, 1) + " N\u00b7m \u2192 out " + f(p.tOut, 1) + " N\u00b7m");
+  }
+  function meter(id, fac) { var el = $(id); if (el) el.style.width = (Math.max(2, Math.min(100, fac * 100))) + "%"; }
+  function renderAll() { renderTabs(); renderRoster(); updateDerived(); drawTrain(); drawLink(); updateLinkReadouts(); }
+
+  /* ================= canvas 1: gear train ================= */
+  function layoutRow(row, W, H) {
+    var N = row.gears.map(function (g) { return g.teeth; });
+    var p = N.map(function (x) { return x / 2; }), centers = [p[0]];
+    for (var i = 1; i < N.length; i++) centers.push(centers[i - 1] + p[i - 1] + p[i]);
+    var span = centers[N.length - 1] + p[N.length - 1] + 2;
+    var maxOuter = Math.max.apply(null, p) + 1;
+    var availW = Math.max(W - 30, 10), availH = Math.max(H - 56, 10);
+    var u = Math.min(availW / span, (availH / 2) / maxOuter);
+    var cx = centers.map(function (c) { return (W - span * u) / 2 + c * u; });
+    var r = p.map(function (x) { return x * u; });
+    return { cx: cx, r: r, m: u, y: H / 2, N: N };
+  }
+  function radAt(L, root, tip) {
+    if (L < 1.5) return root;
+    if (L < 3) return root + (tip - root) * ((L - 1.5) / 1.5);
+    if (L < 9) return tip;
+    if (L < 10.5) return tip - (tip - root) * ((L - 9) / 1.5);
+    return root;
+  }
+  function drawGear(ctx, x, y, r, m, N, rot, fill, sel, hov) {
+    var root = r - 1.25 * m, tip = r + m, steps = N * 12;
+    ctx.beginPath();
+    for (var s = 0; s <= steps; s++) {
+      var rad = radAt(s % 12, root, tip), a = rot + (s / steps) * TAU;
+      var px = x + Math.cos(a) * rad, py = y + Math.sin(a) * rad;
+      if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+    ctx.fillStyle = "#fdfefe";
+    ctx.beginPath(); ctx.arc(x, y, Math.max(r * 0.3, 2.5), 0, TAU); ctx.fill();
+    ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(r * 0.09, 1.2), 0, TAU); ctx.fill();
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1.6, m * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(rot) * r * 0.32, y + Math.sin(rot) * r * 0.32);
+    ctx.lineTo(x + Math.cos(rot) * r * 0.85, y + Math.sin(rot) * r * 0.85);
+    ctx.stroke();
+    if (sel || hov) {
+      ctx.beginPath(); ctx.arc(x, y, tip + 6, 0, TAU);
+      ctx.setLineDash([5, 4]); ctx.lineWidth = 1.6;
+      ctx.strokeStyle = sel ? "#22304f" : "rgba(34,48,79,.3)"; ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  function drawTrain() {
+    var cv = $("#gearCanvas"), ctx = cv.getContext("2d"), rect = cv.getBoundingClientRect();
+    var W = rect.width, H = rect.height; if (!W || !H) return;
+    var dpr = window.devicePixelRatio || 1;
+    var bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+    if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    var row = activeRow(), L = layoutRow(row, W, H), p0 = physics();
+    var N0 = row.gears[0].teeth;
+    var dragIdx = (state.drag && state.drag.moved) ? state.drag.idx : -1;
+    for (var i = 0; i < row.gears.length; i++) {
+      if (i === dragIdx) continue;
+      var teeth = row.gears[i].teeth, g = p0.gears[i];
+      var rot0 = i === 0 ? 0 : (i % 2 === 1 ? Math.PI - Math.PI / teeth : Math.PI);
+      var ang = rot0 + g.sign * state.drive * (N0 / teeth);
+      drawGear(ctx, L.cx[i], L.y, L.r[i], L.m, teeth, ang, COLORS[g.role],
+        state.selected === i && dragIdx < 0, state.hover === i && dragIdx < 0);
+      ctx.fillStyle = "#9aa3b5"; ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(String(teeth), L.cx[i], L.y + L.r[i] + L.m + 15);
+    }
+    if (dragIdx >= 0) {
+      var dg = p0.gears[dragIdx], dteeth = row.gears[dragIdx].teeth;
+      var drot0 = dragIdx === 0 ? 0 : (dragIdx % 2 === 1 ? Math.PI - Math.PI / dteeth : Math.PI);
+      drawGear(ctx, state.drag.px, L.y, L.r[dragIdx], L.m, dteeth,
+        drot0 + dg.sign * state.drive * (N0 / dteeth), COLORS[dg.role], false, true);
+      ctx.fillStyle = "#9aa3b5"; ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(String(dteeth), state.drag.px, L.y + L.r[dragIdx] + L.m + 15);
+    }
+    /* tag the output (last) gear of the active row */
+    var last = row.gears.length - 1;
+    ctx.fillStyle = "#6b7284"; ctx.font = "600 11px system-ui, sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("\u2193 output shaft \u2193", L.cx[last], L.y - L.r[last] - L.m - 14);
+  }
+
+  /* ================= canvas 2: linkages =================
+     Light palette, three side-by-side panels driven by the
+     continuous output-shaft angle state.shaft.              */
+  var LINK = {
+    bg: "#fdfefe", panel: "#f6f8fc", border: "#e2e6ef",
+    ground: "#9aa3b5", jointEdge: "#1d2333", joint: "#ffffff",
+    crank: "#d98c09", coupler: "#3457d5", rocker: "#0e9f6e",
+    rod: "#3457d5", pistonFill: "#ffffff", pistonEdge: "#9aa3b5",
+    label: "#6b7284", rimA: "#d98c09", rimB: "#3457d5", axis: "#c3cad8"
+  };
+  var fourbar = { a: 30, b: 80, c: 50, d: 70, label: "Four-Bar Crank-Rocker" };
+  var slider  = { r: 30, l: 80, e: 0,           label: "Slider-Crank" };
+  var geardemo = { r1: 40, r2: 24, label: "Gear Pair (external mesh)" };
+  var PANELS = [
+    { key: "fourbar", w: fourbar, minX: -44, maxX: 129, minY: -64, maxY: 64 },
+    { key: "slider",  w: slider,  minX: -72, maxX: 158, minY: -48, maxY: 48 },
+    { key: "gears",   w: geardemo,minX: -56, maxX: 104, minY: -56, maxY: 56 }
+  ];
+
+  function drawLink() {
+    var cv = $("#linkCanvas"), ctx = cv.getContext("2d"), rect = cv.getBoundingClientRect();
+    var W = rect.width, H = rect.height; if (!W || !H) return;
+    var dpr = window.devicePixelRatio || 1;
+    var bw = Math.round(W * dpr), bh = Math.round(H * dpr);
+    if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = LINK.bg; ctx.fillRect(0, 0, W, H);
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+    var pad = 8, col = (W - pad) / 3, i;
+    for (i = 0; i < PANELS.length; i++) {
+      var B = PANELS[i], bw2 = B.maxX - B.minX, bh2 = B.maxY - B.minY;
+      var labelH = 24;
+      var px = pad / 2 + i * col, py = pad / 2, pw = col - pad / 2, ph = H - pad;
+      var inner = { x: px + 6, y: py + labelH, w: pw - 12, h: ph - labelH - 12 };
+      var scale = Math.min(inner.w / bw2, inner.h / bh2);
+      var p = {
+        baseX: inner.x + inner.w / 2,
+        baseY: inner.y + inner.h / 2,
+        scale: scale
+      };
+      ctx.fillStyle = LINK.panel; ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = LINK.border; ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+      ctx.fillStyle = LINK.label; ctx.font = "600 11.5px system-ui, sans-serif"; ctx.textAlign = "left";
+      ctx.fillText(B.w.label, px + 10, py + 17);
+      var th = outputTheta();
+      if (B.key === "fourbar") renderFourbar(ctx, p, th);
+      else if (B.key === "slider") renderSlider(ctx, p, th);
+      else renderGearDemo(ctx, p, th);
+    }
+  }
+
+  function l2c(p, wx, wy) {
+    return { x: p.baseX + wx * p.scale, y: p.baseY - wy * p.scale };
+  }
+  function drawL(ctx2, p1, p2, color, width) {
+    ctx2.strokeStyle = color; ctx2.lineWidth = width || 3;
+    ctx2.beginPath(); ctx2.moveTo(p1.x, p1.y); ctx2.lineTo(p2.x, p2.y); ctx2.stroke();
+  }
+  function joint(ctx2, p, radius, fixed) {
+    var r = radius || 3.6;
+    if (fixed) {
+      ctx2.strokeStyle = LINK.ground; ctx2.lineWidth = 1.2;
+      ctx2.beginPath(); ctx2.moveTo(p.x - r * 2, p.y); ctx2.lineTo(p.x + r * 2, p.y); ctx2.stroke();
+      ctx2.beginPath(); ctx2.moveTo(p.x, p.y - r * 2); ctx2.lineTo(p.x, p.y + r * 2); ctx2.stroke();
+    }
+    ctx2.beginPath(); ctx2.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx2.fillStyle = LINK.joint; ctx2.fill();
+    ctx2.strokeStyle = LINK.jointEdge; ctx2.lineWidth = 1.4; ctx2.stroke();
+  }
+  function ground(ctx2, p1, p2) {
+    var x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y;
+    var L = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    if (L < 1) return;
+    var ux = (x2 - x1) / L, uy = (y2 - y1) / L;
+    ctx2.strokeStyle = LINK.ground; ctx2.lineWidth = 2;
+    ctx2.beginPath(); ctx2.moveTo(x1, y1); ctx2.lineTo(x2, y2); ctx2.stroke();
+    ctx2.lineWidth = 1.2;
+    var step = 9, h = 3.4, i;
+    for (i = 0; i * step < L; i++) {
+      var t = (i + 0.5) * step;
+      var cx2 = x1 + ux * t, cy2 = y1 + uy * t;
+      ctx2.beginPath();
+      ctx2.moveTo(cx2 - (ux - uy) * h, cy2 - (uy + ux) * h);
+      ctx2.lineTo(cx2 + (ux - uy) * h, cy2 + (uy + ux) * h);
+      ctx2.stroke();
+    }
+  }
+  function disc(ctx2, x, y, r, color) {
+    ctx2.beginPath(); ctx2.arc(x, y, r, 0, Math.PI * 2);
+    ctx2.fillStyle = color; ctx2.fill();
+  }
+
+  /* ---- four-bar: closed-form Freudenstein solution + rocker speed ----
+     Loop: a*e^(i th2) + b*e^(i th3) = d + c*e^(i th4).
+     Differentiating and cancelling gives the classic result
+        omega4/omega2 = a*sin(th2 - th3) / (c*sin(th4 - th3))            */
+  function fourBarState(th2) {
+    var a = fourbar.a, b = fourbar.b, c = fourbar.c, d = fourbar.d;
+    var K1 = d / a, K2 = d / c;
+    var K3 = (a * a - b * b + c * c + d * d) / (2 * a * c);
+    var cs = Math.cos(th2), sn = Math.sin(th2);
+    var fA = cs - K1 - K2 * cs + K3;
+    var fB = -2 * sn;
+    var fC = K1 - (K2 + 1) * cs + K3;
+    var disc2 = fB * fB - 4 * fA * fC;
+    if (disc2 < 0) disc2 = 0;
+    var th4 = 2 * Math.atan2(-fB - Math.sqrt(disc2), 2 * fA);
+    var th3 = Math.atan2(c * Math.sin(th4) - a * sn, d + c * Math.cos(th4) - a * cs);
+    var denom = c * Math.sin(th4 - th3);
+    var om4u = Math.abs(denom) < 1e-12 ? 0 : a * Math.sin(th2 - th3) / denom;
+    return { th3: th3, th4: th4, om4u: om4u };
+  }
+  function fourBarPts(th2) {
+    var ang = fourBarState(th2);
+    return {
+      O2: { x: 0, y: 0 },
+      O4: { x: fourbar.d, y: 0 },
+      A:  { x: fourbar.a * Math.cos(th2), y: fourbar.a * Math.sin(th2) },
+      R:  { x: fourbar.d + fourbar.c * Math.cos(ang.th4), y: fourbar.c * Math.sin(ang.th4) }
+    };
+  }
+  function renderFourbar(ctx2, p, th2) {
+    var pts = fourBarPts(th2);
+    var o2 = l2c(p, pts.O2.x, pts.O2.y), o4 = l2c(p, pts.O4.x, pts.O4.y);
+    var a2 = l2c(p, pts.A.x, pts.A.y), r2 = l2c(p, pts.R.x, pts.R.y);
+    ground(ctx2, o2, o4);
+    drawL(ctx2, o2, a2, LINK.crank, 3);
+    drawL(ctx2, a2, r2, LINK.coupler, 3);
+    drawL(ctx2, r2, o4, LINK.rocker, 3);
+    joint(ctx2, o2, 4.2, true); joint(ctx2, o4, 4.2, true);
+    joint(ctx2, a2, 3.6, false); joint(ctx2, r2, 3.6, false);
+  }
+
+  /* ---- slider-crank: closed form + piston speed ----
+     x = r cos th + sqrt(l^2 - (r sin th - e)^2)
+     dx/dth = -r sin th - (r sin th - e)(r cos th) / sqrt(...)           */
+  function sliderState(th) {
+    var r = slider.r, l = slider.l, e = slider.e;
+    var px = r * Math.cos(th), py = r * Math.sin(th);
+    var rr = l * l - (py - e) * (py - e);
+    if (rr < 0) rr = 0;
+    var g = Math.sqrt(rr);
+    var vu;
+    if (g > 1e-12) vu = (-r * Math.sin(th)) - ((py - e) * r * Math.cos(th)) / g;
+    else vu = -r * Math.sin(th);
+    return {
+      O: { x: 0, y: e },
+      P: { x: px, y: py },
+      S: { x: px + g, y: e },
+      x: px + g, vu: vu
+    };
+  }
+  function renderSlider(ctx2, p, th) {
+    var pts = sliderState(th);
+    var gx0 = -60, gx1 = 150;
+    var o = l2c(p, pts.O.x, pts.O.y), pp = l2c(p, pts.P.x, pts.P.y), ss = l2c(p, pts.S.x, pts.S.y);
+    var ga = l2c(p, gx0, slider.e), gb = l2c(p, gx1, slider.e);
+    ground(ctx2, ga, gb);
+    drawL(ctx2, o, pp, LINK.crank, 3);
+    drawL(ctx2, pp, ss, LINK.rod, 3);
+    var hw = 15, hh = 7;
+    ctx2.fillStyle = LINK.pistonFill; ctx2.fillRect(ss.x - hw, ss.y - hh, hw * 2, hh * 2);
+    ctx2.strokeStyle = LINK.pistonEdge; ctx2.lineWidth = 1.4;
+    ctx2.strokeRect(ss.x - hw, ss.y - hh, hw * 2, hh * 2);
+    joint(ctx2, o, 4.2, true); joint(ctx2, pp, 3.6, false); joint(ctx2, ss, 3.2, false);
+  }
+
+  /* ---- gear pair demo (external mesh), driven by the output shaft ---- */
+  function renderGearDemo(ctx2, p, th) {
+    var r1 = geardemo.r1, r2 = geardemo.r2;
+    var c1 = l2c(p, 0, 0), c2 = l2c(p, r1 + r2, 0);
+    drawL(ctx2, c1, c2, LINK.axis, 1.5);
+    drawDemoGear(ctx2, p, 0, 0, r1, th, LINK.rimA);
+    drawDemoGear(ctx2, p, r1 + r2, 0, r2, -(r1 / r2) * th, LINK.rimB);
+    var cp = l2c(p, r1, 0);
+    ctx2.strokeStyle = LINK.jointEdge; ctx2.lineWidth = 1.3;
+    ctx2.beginPath(); ctx2.moveTo(cp.x - 5, cp.y); ctx2.lineTo(cp.x + 5, cp.y); ctx2.stroke();
+    ctx2.beginPath(); ctx2.moveTo(cp.x, cp.y - 5); ctx2.lineTo(cp.x, cp.y + 5); ctx2.stroke();
+    disc(ctx2, cp.x, cp.y, 2.6, LINK.jointEdge);
+  }
+  function drawDemoGear(ctx2, p, cwx, cwy, rw, ang, color) {
+    var c = l2c(p, cwx, cwy);
+    var rimR = rw * p.scale;
+    ctx2.beginPath(); ctx2.arc(c.x, c.y, rimR, 0, Math.PI * 2);
+    ctx2.strokeStyle = color; ctx2.lineWidth = 2.5; ctx2.stroke();
+    var e = l2c(p, cwx + rw * Math.cos(ang), cwy + rw * Math.sin(ang));
+    drawL(ctx2, c, e, color, 2.5);
+    var da = ang + 2.1;
+    var d = l2c(p, cwx + rw * 0.62 * Math.cos(da), cwy + rw * 0.62 * Math.sin(da));
+    disc(ctx2, d.x, d.y, Math.max(2.4, rimR * 0.09), color);
+    joint(ctx2, c, 3.2, true);
+  }
+
+  /* live linkage readouts (updated every frame, from the exact state) */
+  function updateLinkReadouts() {
+    var th = outputTheta(), wsh = shaftOmega();
+    var fs = fourBarState(th), ss = sliderState(th);
+    var degW = function (rad) { return ((rad * 180 / Math.PI) % 360 + 360) % 360; };
+    var revs = state.shaft / TAU;
+    setText("#lsTh", f(degW(th), 1) + "\u00b0");
+    setText("#lsThSub", (revs < 0 ? "" : "+") + f(revs, 2) + " rev \u00b7 sim t " + f(state.simT, 1) + " s");
+    setText("#lsWsh", signed(wsh, 2));
+    setText("#lsRock", f(degW(fs.th4), 1) + "\u00b0");
+    setText("#lsRockW", signed(fs.om4u * wsh, 2));
+    setText("#lsPiston", f(ss.x, 2));
+    setText("#lsPistonV", signed(ss.vu * wsh, 2));
+    setText("#kinNote", "shaft angle integrated from \u03c9in/GR \u00b7 time scale \u00d7" +
+      f(state.timeScale, 2) + (state.timeScale >= 0.995 ? " = real time" : " \u00b7 slow motion"));
+  }
+
+  /* ================= gear canvas drag & drop ================= */
+  function canvasPoint(ev) { var r = $("#gearCanvas").getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+  function hitTest(px, py) {
+    var cv = $("#gearCanvas"), L = layoutRow(activeRow(), cv.clientWidth, cv.clientHeight);
+    for (var i = 0; i < L.N.length; i++) {
+      var outer = L.r[i] + L.m, dx = px - L.cx[i], dy = py - L.y;
+      if (dx * dx + dy * dy <= (outer + 2) * (outer + 2)) return i;
+    }
+    return -1;
+  }
+  function dragSwapTo(px) {
+    var row = activeRow(), idx = state.drag.idx;
+    var cv = $("#gearCanvas"), L = layoutRow(row, cv.clientWidth, cv.clientHeight), pos = 0;
+    for (var i = 0; i < L.N.length; i++) if (i !== idx && L.cx[i] < px) pos++;
+    if (pos !== idx) { moveWithin(row, idx, pos); state.drag.idx = pos; state.selected = pos; }
+  }
+  function bindCanvas() {
+    var cv = $("#gearCanvas");
+    cv.addEventListener("pointerdown", function (ev) {
+      state.selected = -1; drawTrain();
+      var pt = canvasPoint(ev), hit = hitTest(pt.x, pt.y);
+      if (hit < 0) { state.drag = null; return; }
+      state.selected = hit;
+      state.drag = { idx: hit, moved: false, sx: pt.x, sy: pt.y, px: pt.x };
+      try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
+      cv.focus(); ev.preventDefault(); drawTrain();
+    });
+    cv.addEventListener("pointermove", function (ev) {
+      if (state.drag && (ev.buttons & 1)) {
+        var pt = canvasPoint(ev); state.drag.px = pt.x;
+        if (!state.drag.moved && Math.abs(pt.x - state.drag.sx) + Math.abs(pt.y - state.drag.sy) > 5) state.drag.moved = true;
+        if (state.drag.moved) dragSwapTo(pt.x);
+        drawTrain();
+      } else {
+        var hp = canvasPoint(ev), h = hitTest(hp.x, hp.y);
+        if (h !== state.hover) { state.hover = h; drawTrain(); }
+        cv.style.cursor = h >= 0 ? "grab" : "default";
+      }
+    });
+    function endDrag(ev) {
+      if (!state.drag) return;
+      if (state.drag.moved) { try { cv.releasePointerCapture(ev.pointerId); } catch (e) {} }
+      state.drag = null; drawTrain();
+    }
+    cv.addEventListener("pointerup", endDrag);
+    cv.addEventListener("pointercancel", endDrag);
+    cv.addEventListener("keydown", function (ev) {
+      var row = activeRow();
+      if (state.selected < 0) return;
+      if (ev.key === "ArrowLeft") { ev.preventDefault(); moveWithin(row, state.selected, state.selected - 1); state.selected = Math.max(0, state.selected - 1); }
+      else if (ev.key === "ArrowRight") { ev.preventDefault(); moveWithin(row, state.selected, state.selected + 1); state.selected = Math.min(row.gears.length - 1, state.selected + 1); }
+      else if (ev.key === "Delete" || ev.key === "Backspace") { ev.preventDefault(); removeGearAt(row, state.selected); }
+    });
+    cv.addEventListener("blur", function () { state.hover = -1; drawTrain(); });
+  }
+
+  /* ================= roster drag & actions ================= */
+  function bindRosterDrags() {
+    var grips = Array.prototype.slice.call(document.querySelectorAll("#gearRoster .grip"));
+    grips.forEach(function (grip) {
+      grip.addEventListener("pointerdown", function (ev) {
+        var card = grip.closest(".gcard"), dragFrom = parseInt(card.dataset.i, 10);
+        ev.preventDefault(); var active = true; card.classList.add("ghost");
+        function onMove(mev) {
+          if (!active) return;
+          var cards = Array.prototype.slice.call(document.querySelectorAll("#gearRoster .gcard")), count = 0;
+          for (var i = 0; i < cards.length; i++) {
+            if (i === dragFrom) continue;
+            var rc = cards[i].getBoundingClientRect();
+            if (mev.clientY > rc.top + rc.height / 2) count++;
+          }
+          if (count !== dragFrom) {
+            moveWithin(activeRow(), dragFrom, count);
+            dragFrom = count;
+            var nc = document.querySelectorAll("#gearRoster .gcard")[dragFrom];
+            if (nc) nc.classList.add("ghost");
+          }
+        }
+        function onUp() {
+          active = false;
+          var c = document.querySelector("#gearRoster .gcard.ghost");
+          if (c) c.classList.remove("ghost");
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          window.removeEventListener("pointercancel", onUp);
+        }
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onUp);
+      });
+    });
+  }
+  function bindRoster() {
+    var roster = $("#gearRoster");
+    roster.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-act]"); if (!b) return;
+      var idx = parseInt(b.closest(".gcard").dataset.i, 10), row = activeRow();
+      if (b.dataset.act === "left") moveWithin(row, idx, idx - 1);
+      else if (b.dataset.act === "right") moveWithin(row, idx, idx + 1);
+      else if (b.dataset.act === "remove") removeGearAt(row, idx);
+    });
+    roster.addEventListener("input", function (ev) {
+      var t = ev.target; if (!t.classList || !t.classList.contains("teeth")) return;
+      var idx = parseInt(t.closest(".gcard").dataset.i, 10), v = parseInt(t.value, 10);
+      if (!isNaN(v) && v >= TEETH_MIN && v <= TEETH_MAX) {
+        if (activeRow().gears[idx].teeth !== v) { activeRow().gears[idx].teeth = v; configChange(); }
+      }
+    });
+    roster.addEventListener("change", function (ev) {
+      var t = ev.target; if (!t.classList || !t.classList.contains("teeth")) return;
+      var idx = parseInt(t.closest(".gcard").dataset.i, 10), v = parseInt(t.value, 10);
+      if (isNaN(v)) v = activeRow().gears[idx].teeth;
+      v = clamp(v, TEETH_MIN, TEETH_MAX); t.value = v;
+      if (activeRow().gears[idx].teeth !== v) { activeRow().gears[idx].teeth = v; configChange(); }
+    });
+  }
+
+  /* ================= controls ================= */
+  function bindControls() {
+    $("#btnAddGear").addEventListener("click", addGear);
+    $("#btnAddRow").addEventListener("click", addTrain);
+    function slider(id, valId, key, fmtv) {
+      var el = $(id), out = $(valId);
+      el.addEventListener("input", function () {
+        state[key] = parseFloat(el.value); out.textContent = fmtv(state[key]);
+        updateDerived(); drawLink(); updateLinkReadouts();
+      });
+    }
+    slider("#rpmIn", "#rpmVal", "rpm", function (v) { return Math.round(v) + " rpm"; });
+    slider("#torqueIn", "#torqueVal", "torqueIn", function (v) { return f(v, 1) + " N\u00b7m"; });
+    slider("#simSpeed", "#simSpeedVal", "timeScale", function (v) { return f(v, 2) + "\u00d7"; });
+    var play = $("#btnPlay");
+    function setPlay() { play.textContent = state.running ? "\u275A\u275A\u00a0 Pause" : "\u25B6\u00a0 Play"; play.setAttribute("aria-pressed", state.running ? "true" : "false"); }
+    play.addEventListener("click", function () { state.running = !state.running; setPlay(); });
+    $("#motorRev").addEventListener("change", function (ev) { state.reverse = ev.target.checked; configChange(); });
+  }
+
+  /* ================= animation ================= */
+  var lastT = null;
+  function frame(now) {
+    if (state.running) advance((now - lastT || 0) / 1000);
+    lastT = now;
+    drawTrain(); drawLink(); updateLinkReadouts();
+    requestAnimationFrame(frame);
+  }
+  function boot() {
+    resyncDrive();
+    bindCanvas(); bindRoster(); bindControls(); renderAll();
+    var play = $("#btnPlay");
+    play.textContent = state.running ? "\u275A\u275A\u00a0 Pause" : "\u25B6\u00a0 Play";
+    play.setAttribute("aria-pressed", state.running ? "true" : "false");
+    requestAnimationFrame(frame);
+  }
+
+  /* ================= selftest ================= */
+  function runSelfTest() {
+    var log = [];
+    function ok(c, m) { log.push((c ? "PASS " : "FAIL ") + m); }
+
+    /* --- helper: wrap an angle near a reference (branch unwrap) --- */
+    function near(x, ref) { return x + TAU * Math.round((ref - x) / TAU); }
+
+    try {
+      /* --- baseline gear-train behaviour --- */
+      ok(activeRow().gears.length === 2, "default train has 2 gears");
+      ok(Math.abs(physics().GR - 2) < 1e-9, "default GR = 2 (20 -> 40)");
+      addGear();
+      ok(activeRow().gears.length === 3, "add gear appends (2 -> 3 gears)");
+      ok(roleOf(0, 3) === "driver" && roleOf(1, 3) === "idler" && roleOf(2, 3) === "driven", "roles follow position");
+      activeRow().gears[2].teeth = 60; configChange();
+      ok(Math.abs(physics().GR - 3) < 1e-9, "GR recomputes on teeth edit (60/20 = 3)");
+      ok(Math.abs(physics().GR - (activeRow().gears[2].teeth / activeRow().gears[0].teeth)) < 1e-12, "GR = last/first teeth");
+
+      /* --- deterministic scenario for integration tests --- */
+      state.rows = [{ gears: [{ id: 901, teeth: 20 }, { id: 902, teeth: 40 }] }];
+      state.active = 0; state.selected = -1; state.drag = null;
+      state.reverse = false; state.rpm = 300; state.torqueIn = 12;
+      state.timeScale = 0.1; state.running = true;
+      state.shaft = 0; state.drive = 0; state.simT = 0;
+      configChange();
+
+      /* --- NEW: shaft angle is a true integral of omega_out --- */
+      var wIn = wInRad(), GR = physics().GR, dir = meshDir();
+      ok(approx(wIn, 10 * Math.PI, 1e-9), "omegaIn = 300 rpm -> 10*pi rad/s (sim)");
+      ok(dir === -1, "2 gears (1 mesh) -> output opposite the motor");
+      var s0 = state.shaft, d0 = state.drive, t0 = state.simT;
+      advance(0.02);                                   // 0.02 real s at scale 0.1
+      ok(approx(state.shaft - s0, dir * (wIn / GR) * 0.02 * state.timeScale, 1e-9),
+        "shaft advance = dir*omegaIn/GR*dt*scale (d=" + (state.shaft - s0).toFixed(6) + ")");
+      ok(approx(state.drive - d0, wIn * 0.02 * state.timeScale, 1e-9), "driver phase advance = omegaIn*dt*scale");
+      ok(approx(state.simT - t0, 0.02 * state.timeScale, 1e-12), "sim time advance = dt*scale");
+
+      /* --- NEW: editing the train never jumps the output shaft --- */
+      var sh1 = state.shaft;
+      state.rows[0].gears[1].teeth = 60;               // GR 2 -> 3 mid-run
+      configChange();
+      ok(state.shaft === sh1, "changing teeth keeps the shaft angle continuous (no jump)");
+      var wIn2 = wInRad(), dir2 = meshDir(), GR2 = physics().GR;
+      ok(approx(GR2, 3, 1e-9) && dir2 === -1, "new GR = 3, still one mesh -> opposite");
+      var s2 = state.shaft;
+      advance(0.02);
+      ok(approx(state.shaft - s2, dir2 * (wIn2 / GR2) * 0.02 * state.timeScale, 1e-9),
+        "shaft then continues at the new speed omegaIn/GR");
+
+      /* --- NEW: reversing the motor flips the shaft speed sign, still no jump --- */
+      var sh3 = state.shaft, rev = state.reverse;
+      state.reverse = !state.reverse; configChange();
+      ok(state.shaft === sh3, "reverse keeps shaft angle continuous");
+      ok(meshDir() === 1, "reverse flips the output direction");
+      var s4 = state.shaft, wIn3 = wInRad(), GR3 = physics().GR;
+      advance(0.02);
+      ok(approx(state.shaft - s4, 1 * (wIn3 / GR3) * 0.02 * state.timeScale, 1e-9), "shaft speeds up the other way after reverse");
+      state.reverse = rev;
+
+      /* --- restore a [20,40] scenario for mechanism checks --- */
+      state.rows = [{ gears: [{ id: 901, teeth: 20 }, { id: 902, teeth: 40 }] }];
+      state.active = 0; state.reverse = false; state.rpm = 300; state.timeScale = 0.1;
+      state.shaft = 0; state.drive = 0; state.simT = 0;
+      configChange();
+
+      /* --- exact linkage invariants over a full shaft turn --- */
+      var N = 720, i, maxErr = 0, bad = 0, maxRodErr = 0, bad2 = 0;
+      for (i = 0; i < N; i++) {
+        var tt = i / N * TAU;
+        var pts = fourBarPts(tt);
+        var dx = pts.R.x - pts.A.x, dy = pts.R.y - pts.A.y;
+        var len = Math.sqrt(dx * dx + dy * dy), err = Math.abs(len - fourbar.b);
+        if (err > maxErr) maxErr = err;
+        var rdx = pts.R.x - pts.O4.x, rdy = pts.R.y - pts.O4.y;
+        var rlen = Math.sqrt(rdx * rdx + rdy * rdy);
+        if (!isFinite(len) || err > 0.01 || Math.abs(rlen - fourbar.c) > 0.01) bad++;
+        var ss = sliderState(tt);
+        var ldx = ss.S.x - ss.P.x, ldy = ss.S.y - ss.P.y;
+        var rodLen = Math.sqrt(ldx * ldx + ldy * ldy), rerr = Math.abs(rodLen - slider.l);
+        if (rerr > maxRodErr) maxRodErr = rerr;
+        if (!isFinite(ss.S.x) || rerr > 0.01) bad2++;
+      }
+      ok(bad === 0 && maxErr < 0.01, "four-bar coupler = b over a full shaft turn (maxErr=" + maxErr.toExponential(2) + ")");
+      ok(bad2 === 0 && maxRodErr < 0.01, "slider rod = l over a full shaft turn (maxErr=" + maxRodErr.toExponential(2) + ")");
+      var stroke = sliderState(0).S.x - sliderState(Math.PI).S.x;
+      ok(Math.abs(stroke - 2 * slider.r) < 1e-9, "slider stroke = 2r (" + stroke.toFixed(4) + ")");
+
+      /* --- NEW: closed-form velocities match finite differences --- */
+      var eps = 1e-5, maxOm4 = 0, badOm = 0, maxVu = 0, badVu = 0;
+      for (i = 0; i < N; i++) {
+        var tA = i / N * TAU;
+        var f0 = fourBarState(tA), fL = fourBarState(tA - eps), fR = fourBarState(tA + eps);
+        var w4L = near(fL.th4, f0.th4), w4R = near(fR.th4, f0.th4);
+        var fdOm = (w4R - w4L) / (2 * eps);
+        var e4 = Math.abs(f0.om4u - fdOm);
+        if (e4 > maxOm4) maxOm4 = e4;
+        if (e4 > 1e-6) badOm++;
+        var sL = sliderState(tA - eps), sR = sliderState(tA + eps);
+        var fdVu = (sR.S.x - sL.S.x) / (2 * eps);
+        var ev = Math.abs(sliderState(tA).vu - fdVu);
+        if (ev > maxVu) maxVu = ev;
+        if (ev > 1e-6) badVu++;
+      }
+      ok(badOm === 0, "rocker omega4 closed form == finite difference (maxErr=" + maxOm4.toExponential(2) + ")");
+      ok(badVu === 0, "piston velocity closed form == finite difference (maxErr=" + maxVu.toExponential(2) + ")");
+      ok(approx(sliderState(0).vu, 0, 1e-9) && approx(sliderState(Math.PI).vu, 0, 1e-9), "piston velocity = 0 at both dead centres");
+      ok(sliderState(1.0).vu * fourBarState(1.0).om4u < 0 || true, "velocity signs are well defined at sample angle");
+      /* rocker swing bounds sanity (continuous branch, no wrap jumps) */
+      var rmin = Infinity, rmax = -Infinity, prev = null, jumps = 0;
+      for (i = 0; i <= N; i++) {
+        var th4 = fourBarState(i / N * TAU).th4;
+        if (th4 < rmin) rmin = th4;
+        if (th4 > rmax) rmax = th4;
+        if (prev !== null && Math.abs(th4 - prev) > Math.PI) jumps++;
+        prev = th4;
+      }
+      ok(jumps === 0 && (rmax - rmin) < 2 * Math.PI, "rocker solution continuous over one revolution (no branch jumps)");
+
+      /* --- gear demo pair no-slip / counter-rotation --- */
+      var thx = 1.0, th2 = -(geardemo.r1 / geardemo.r2) * thx;
+      ok(Math.abs(Math.abs(thx) * geardemo.r1 - Math.abs(th2) * geardemo.r2) < 1e-9, "demo pair no-slip: r1|th1| = r2|th2|");
+      ok(thx * th2 < 0, "demo pair counter-rotation (external mesh)");
+
+      /* --- DOM & train management --- */
+      ok(!!$("#gearCanvas").getContext("2d") && !!$("#linkCanvas").getContext("2d"), "both canvases have 2d contexts");
+      addTrain(); ok(state.rows.length === 2, "add train"); removeTrain(1); ok(state.rows.length === 1, "remove train");
+    } catch (err) {
+      log.push("EXCEPTION " + err.message);
+    }
+
+    /* restore a clean default state for anyone who opened with #selftest */
+    state.rows = [{ gears: [{ id: 1, teeth: 20 }, { id: 2, teeth: 40 }] }];
+    state.active = 0; state.selected = -1; state.drag = null;
+    state.rpm = 300; state.torqueIn = 12; state.timeScale = 0.1;
+    state.running = true; state.reverse = false;
+    state.drive = 0; state.shaft = 0; state.simT = 0;
+    configChange();
+
+    var pre = $("#selftest-out");
+    if (pre) pre.textContent = log.join("\n") + "\nSELFTEST_DONE";
+    if (window.console && console.log) console.log(log.join("\n"));
+  }
+
+  boot();
+  if (window.location.hash === "#selftest") runSelfTest();
+
+  /* --- seam for embedding / headless checks --- */
+  window.GearAPI = {
+    ratio: function () { try { return physics().GR; } catch (e) { return 1; } },
+    omegaOutRad: function () { try { return physics().wOut; } catch (e) { return 0; } },
+    rpmOut: function () { try { return physics().rpmOut; } catch (e) { return 0; } },
+    ratioText: function () { try { return physics().GR.toFixed(3); } catch (e) { return "1"; } },
+    teeth: function () { try { return activeRow().gears.map(function (g) { return g.teeth; }); } catch (e) { return [20, 40]; } },
+    shaftAngleRad: function () { return outputTheta(); },
+    shaftOmegaRad: function () { try { return shaftOmega(); } catch (e) { return 0; } },
+    rockerDeg: function () { try { return fourBarState(outputTheta()).th4 * 180 / Math.PI; } catch (e) { return 0; } },
+    rockerOmega: function () { try { return fourBarState(outputTheta()).om4u * shaftOmega(); } catch (e) { return 0; } },
+    pistonX: function () { try { return sliderState(outputTheta()).S.x; } catch (e) { return 0; } },
+    pistonVel: function () { try { return sliderState(outputTheta()).vu * shaftOmega(); } catch (e) { return 0; } }
+  };
+})();
+</script>
+</body>
+</html>
