@@ -23,12 +23,12 @@
 
   /* ---------- header ---------- */
   header.topbar{background:var(--panel);border-bottom:1px solid var(--line)}
-  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .brand{display:flex;align-items:center;gap:9px;font-weight:750;font-size:16px;letter-spacing:.2px;padding:11px 0;user-select:none}
   .brand .mark{width:24px;height:24px;border-radius:7px;background:var(--blue);color:#fff;
     display:grid;place-items:center;font-size:15px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
   .brand small{font-weight:500;color:var(--muted);font-size:12px}
-  .top-note{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:14px}
+  .top-note{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
   .top-note .pill{background:#eef1f8;border:1px solid var(--line);color:var(--muted);
     border-radius:999px;padding:3px 10px;font-weight:600}
   .top-note a.nav{background:#fff;border:1px solid var(--blue);color:var(--blue);
@@ -194,7 +194,7 @@
 <header class="topbar">
   <div class="wrap">
     <div class="brand"><span class="mark">&#9881;</span>Gear Lab &amp; Linkages <small>&nbsp;·&nbsp; one motor drives the whole mechanism</small></div>
-    <div class="top-note"><span class="pill">ideal gearbox · no losses · exact kinematics</span><a class="nav" href="transmission-sim.html">Transmission Lab &#8599;</a></div>
+    <div class="top-note"><a class="nav" href="transmission-sim.html">Transmission Lab &#8599;</a></div>
   </div>
 </header>
 
